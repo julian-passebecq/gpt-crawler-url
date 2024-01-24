@@ -1,0 +1,28 @@
+﻿certification,learning path,module url
+dp500,Introduction to data analytics on Azure,https://learn.microsoft.com/en-us/training/modules/explore-azure-data-services-for-modern-analytics/
+dp500,Introduction to data analytics on Azure,https://learn.microsoft.com/en-us/training/modules/understand-concepts-of-data-analytics/
+dp500,Introduction to data analytics on Azure,https://learn.microsoft.com/en-us/training/modules/explore-data-analytics-scale/
+dp500,Govern data across an enterprise,https://learn.microsoft.com/en-us/training/modules/intro-to-microsoft-purview/
+dp500,Govern data across an enterprise,https://learn.microsoft.com/en-us/training/modules/discover-trusted-data-use-azure-purview/
+dp500,Govern data across an enterprise,https://learn.microsoft.com/en-us/training/modules/catalog-data-artifacts-use-microsoft-purview/
+dp500,Govern data across an enterprise,https://learn.microsoft.com/en-us/training/modules/manage-power-bi-artifacts-use-microsoft-purview/
+dp500,Govern data across an enterprise,https://learn.microsoft.com/en-us/training/modules/integrate-microsoft-purview-azure-synapse-analytics/
+dp500,"Model, query, and explore data in Azure Synapse",https://learn.microsoft.com/en-us/training/modules/introduction-azure-synapse-analytics/
+dp500,"Model, query, and explore data in Azure Synapse",https://learn.microsoft.com/en-us/training/modules/query-data-lake-using-azure-synapse-serverless-sql-pools/
+dp500,"Model, query, and explore data in Azure Synapse",https://learn.microsoft.com/en-us/training/modules/understand-big-data-engineering-with-apache-spark-azure-synapse-analytics/
+dp500,"Model, query, and explore data in Azure Synapse",https://learn.microsoft.com/en-us/training/modules/design-multidimensional-schema-to-optimize-analytical-workloads/
+dp500,Prepare data for tabular models in Power BI,https://learn.microsoft.com/en-us/training/modules/choose-power-bi-model-framework/
+dp500,Prepare data for tabular models in Power BI,https://learn.microsoft.com/en-us/training/modules/understand-scalability-power-bi/
+dp500,Prepare data for tabular models in Power BI,https://learn.microsoft.com/en-us/training/modules/create-manage-scalable-power-bi-dataflows/
+dp500,Design and build tabular models,https://learn.microsoft.com/en-us/training/modules/create-power-bi-model-relationships/
+dp500,Design and build tabular models,https://learn.microsoft.com/en-us/training/modules/dax-power-bi-time-intelligence/
+dp500,Design and build tabular models,https://learn.microsoft.com/en-us/training/modules/create-calculation-groups/
+dp500,Design and build tabular models,https://learn.microsoft.com/en-us/training/modules/enforce-power-bi-model-security/
+dp500,Design and build tabular models,https://learn.microsoft.com/en-us/training/modules/use-tools-optimize-power-bi-performance/
+dp500,Implement advanced data visualization techniques by using Power BI,https://learn.microsoft.com/en-us/training/modules/understand-advanced-data-visualization-concepts/
+dp500,Implement advanced data visualization techniques by using Power BI,https://learn.microsoft.com/en-us/training/modules/monitor-data-real-time-power-bi/
+dp500,Implement advanced data visualization techniques by using Power BI,https://learn.microsoft.com/en-us/training/modules/create-paginated-reports-power-bi/
+dp500,Implement and manage an analytics environment,https://learn.microsoft.com/en-us/training/modules/power-bi-admin-governance/
+dp500,Implement and manage an analytics environment,https://learn.microsoft.com/en-us/training/modules/power-bi-admin-monitor/
+dp500,Implement and manage an analytics environment,https://learn.microsoft.com/en-us/training/modules/power-bi-admin-reach/
+dp500,Implement and manage an analytics environment,https://learn.microsoft.com/en-us/training/modules/build-reports-using-power-bi-azure-synapse-analytics/

@@ -1,0 +1,3041 @@
+Query files using a serverless SQL pool - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/query-data-lake-using-azure-synapse-serverless-sql-pools/3-query-files
+Query files using a serverless SQL pool
+10 minutes
+
+You can use a serverless SQL pool to query data files in various common file formats, including:
+
+Delimited text, such as comma-separated values (CSV) files.
+JavaScript object notation (JSON) files.
+Parquet files.
+
+The basic syntax for querying is the same for all of these types of file, and is built on the OPENROWSET SQL function; which generates a tabular rowset from data in one or more files. For example, the following query could be used to extract data from CSV files.
+
+SELECT TOP 100 *
+FROM OPENROWSET(
+    BULK 'https://mydatalake.blob.core.windows.net/data/files/*.csv',
+    FORMAT = 'csv') AS rows
+
+
+The OPENROWSET function includes more parameters that determine factors such as:
+
+The schema of the resulting rowset
+Additional formatting options for delimited text files.
+
+ Tip
+
+You'll find the full syntax for the OPENROWSET function in the Azure Synapse Analytics documentation.
+
+The output from OPENROWSET is a rowset to which an alias must be assigned. In the previous example, the alias rows is used to name the resulting rowset.
+
+The BULK parameter includes the full URL to the location in the data lake containing the data files. This can be an individual file, or a folder with a wildcard expression to filter the file types that should be included. The FORMAT parameter specifies the type of data being queried. The example above reads delimited text from all .csv files in the files folder.
+
+ Note
+
+This example assumes that the user has access to the files in the underlying store, If the files are protected with a SAS key or custom identity, you would need to create a server-scoped credential.
+
+As seen in the previous example, you can use wildcards in the BULK parameter to include or exclude files in the query. The following list shows a few examples of how this can be used:
+
+https://mydatalake.blob.core.windows.net/data/files/file1.csv: Only include file1.csv in the files folder.
+https://mydatalake.blob.core.windows.net/data/files/file*.csv: All .csv files in the files folder with names that start with "file".
+https://mydatalake.blob.core.windows.net/data/files/*: All files in the files folder.
+https://mydatalake.blob.core.windows.net/data/files/**: All files in the files folder, and recursively its subfolders.
+
+You can also specify multiple file paths in the BULK parameter, separating each path with a comma.
+
+Querying delimited text files
+
+Delimited text files are a common file format within many businesses. The specific formatting used in delimited files can vary, for example:
+
+With and without a header row.
+Comma and tab-delimited values.
+Windows and Unix style line endings.
+Non-quoted and quoted values, and escaping characters.
+
+Regardless of the type of delimited file you're using, you can read data from them by using the OPENROWSET function with the csv FORMAT parameter, and other parameters as required to handle the specific formatting details for your data. For example:
+
+SELECT TOP 100 *
+FROM OPENROWSET(
+    BULK 'https://mydatalake.blob.core.windows.net/data/files/*.csv',
+    FORMAT = 'csv',
+    PARSER_VERSION = '2.0',
+    FIRSTROW = 2) AS rows
+
+
+The PARSER_VERSION is used to determine how the query interprets the text encoding used in the files. Version 1.0 is the default and supports a wide range of file encodings, while version 2.0 supports fewer encodings but offers better performance. The FIRSTROW parameter is used to skip rows in the text file, to eliminate any unstructured preamble text or to ignore a row containing column headings.
+
+Additional parameters you might require when working with delimited text files include:
+
+FIELDTERMINATOR - the character used to separate field values in each row. For example, a tab-delimited file separates fields with a TAB (\t) character. The default field terminator is a comma (,).
+ROWTERMINATOR - the character used to signify the end of a row of data. For example, a standard Windows text file uses a combination of a carriage return (CR) and line feed (LF), which is indicated by the code 
+; while UNIX-style text files use a single line feed character, which can be indicated using the code 0x0a.
+FIELDQUOTE - the character used to enclose quoted string values. For example, to ensure that the comma in the address field value 126 Main St, apt 2 isn't interpreted as a field delimiter, you might enclose the entire field value in quotation marks like this: "126 Main St, apt 2". The double-quote (") is the default field quote character.
+
+ Tip
+
+For details of additional parameters when working with delimited text files, refer to the Azure Synapse Analytics documentation.
+
+Specifying the rowset schema
+
+It's common for delimited text files to include the column names in the first row. The OPENROWSET function can use this to define the schema for the resulting rowset, and automatically infer the data types of the columns based on the values they contain. For example, consider the following delimited text:
+
+product_id,product_name,list_price
+123,Widget,12.99
+124,Gadget,3.99
+
+
+The data consists of the following three columns:
+
+product_id (integer number)
+product_name (string)
+list_price (decimal number)
+
+You could use the following query to extract the data with the correct column names and appropriately inferred SQL Server data types (in this case INT, NVARCHAR, and DECIMAL)
+
+SELECT TOP 100 *
+FROM OPENROWSET(
+    BULK 'https://mydatalake.blob.core.windows.net/data/files/*.csv',
+    FORMAT = 'csv',
+    PARSER_VERSION = '2.0',
+    HEADER_ROW = TRUE) AS rows
+
+
+The HEADER_ROW parameter (which is only available when using parser version 2.0) instructs the query engine to use the first row of data in each file as the column names, like this:
+
+Expand table
+product_id	product_name	list_price
+123	Widget	12.9900
+124	Gadget	3.9900
+
+Now consider the following data:
+
+123,Widget,12.99
+124,Gadget,3.99
+
+
+This time, the file doesn't contain the column names in a header row; so while the data types can still be inferred, the column names will be set to C1, C2, C3, and so on.
+
+Expand table
+C1	C2	C3
+123	Widget	12.9900
+124	Gadget	3.9900
+
+To specify explicit column names and data types, you can override the default column names and inferred data types by providing a schema definition in a WITH clause, like this:
+
+SELECT TOP 100 *
+FROM OPENROWSET(
+    BULK 'https://mydatalake.blob.core.windows.net/data/files/*.csv',
+    FORMAT = 'csv',
+    PARSER_VERSION = '2.0')
+WITH (
+    product_id INT,
+    product_name VARCHAR(20) COLLATE Latin1_General_100_BIN2_UTF8,
+    list_price DECIMAL(5,2)
+) AS rows
+
+
+This query produces the expected results:
+
+Expand table
+product_id	product_name	list_price
+123	Widget	12.99
+124	Gadget	3.99
+
+ Tip
+
+When working with text files, you may encounter some incompatibility with UTF-8 encoded data and the collation used in the master database for the serverless SQL pool. To overcome this, you can specify a compatible collation for individual VARCHAR columns in the schema. See the troubleshooting guidance for more details.
+
+Querying JSON files
+
+JSON is a popular format for web applications that exchange data through REST interfaces or use NoSQL data stores such as Azure Cosmos DB. So, it's not uncommon to persist data as JSON documents in files in a data lake for analysis.
+
+For example, a JSON file that defines an individual product might look like this:
+
+{
+    "product_id": 123,
+    "product_name": "Widget",
+    "list_price": 12.99
+}
+
+
+To return product data from a folder containing multiple JSON files in this format, you could use the following SQL query:
+
+SELECT doc
+FROM
+    OPENROWSET(
+        BULK 'https://mydatalake.blob.core.windows.net/data/files/*.json',
+        FORMAT = 'csv',
+        FIELDTERMINATOR ='0x0b',
+        FIELDQUOTE = '0x0b',
+        ROWTERMINATOR = '0x0b'
+    ) WITH (doc NVARCHAR(MAX)) as rows
+
+
+OPENROWSET has no specific format for JSON files, so you must use csv format with FIELDTERMINATOR, FIELDQUOTE, and ROWTERMINATOR set to 0x0b, and a schema that includes a single NVARCHAR(MAX) column. The result of this query is a rowset containing a single column of JSON documents, like this:
+
+Expand table
+doc
+{"product_id":123,"product_name":"Widget","list_price": 12.99}
+{"product_id":124,"product_name":"Gadget","list_price": 3.99}
+
+To extract individual values from the JSON, you can use the JSON_VALUE function in the SELECT statement, as shown here:
+
+SELECT JSON_VALUE(doc, '$.product_name') AS product,
+           JSON_VALUE(doc, '$.list_price') AS price
+FROM
+    OPENROWSET(
+        BULK 'https://mydatalake.blob.core.windows.net/data/files/*.json',
+        FORMAT = 'csv',
+        FIELDTERMINATOR ='0x0b',
+        FIELDQUOTE = '0x0b',
+        ROWTERMINATOR = '0x0b'
+    ) WITH (doc NVARCHAR(MAX)) as rows
+
+
+This query would return a rowset similar to the following results:
+
+Expand table
+product	price
+Widget	12.99
+Gadget	3.99
+Querying Parquet files
+
+Parquet is a commonly used format for big data processing on distributed file storage. It's an efficient data format that is optimized for compression and analytical querying.
+
+In most cases, the schema of the data is embedded within the Parquet file, so you only need to specify the BULK parameter with a path to the file(s) you want to read, and a FORMAT parameter of parquet; like this:
+
+SELECT TOP 100 *
+FROM OPENROWSET(
+    BULK 'https://mydatalake.blob.core.windows.net/data/files/*.*',
+    FORMAT = 'parquet') AS rows
+
+Query partitioned data
+
+It's common in a data lake to partition data by splitting across multiple files in subfolders that reflect partitioning criteria. This enables distributed processing systems to work in parallel on multiple partitions of the data, or to easily eliminate data reads from specific folders based on filtering criteria. For example, suppose you need to efficiently process sales order data, and often need to filter based on the year and month in which orders were placed. You could partition the data using folders, like this:
+
+/orders
+/year=2020
+/month=1
+/01012020.parquet
+/02012020.parquet
+...
+/month=2
+/01022020.parquet
+/02022020.parquet
+...
+...
+/year=2021
+/month=1
+/01012021.parquet
+/02012021.parquet
+...
+...
+
+To create a query that filters the results to include only the orders for January and February 2020, you could use the following code:
+
+SELECT *
+FROM OPENROWSET(
+    BULK 'https://mydatalake.blob.core.windows.net/data/orders/year=*/month=*/*.*',
+    FORMAT = 'parquet') AS orders
+WHERE orders.filepath(1) = '2020'
+    AND orders.filepath(2) IN ('1','2');
+
+
+The numbered filepath parameters in the WHERE clause reference the wildcards in the folder names in the BULK path -so the parameter 1 is the * in the year=* folder name, and parameter 2 is the * in the month=* folder name.
+
+
+
+
+Create external database objects - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/query-data-lake-using-azure-synapse-serverless-sql-pools/4-external-objects
+Create external database objects
+6 minutes
+
+You can use the OPENROWSET function in SQL queries that run in the default master database of the built-in serverless SQL pool to explore data in the data lake. However, sometimes you may want to create a custom database that contains some objects that make it easier to work with external data in the data lake that you need to query frequently.
+
+Creating a database
+
+You can create a database in a serverless SQL pool just as you would in a SQL Server instance. You can use the graphical interface in Synapse Studio, or a CREATE DATABASE statement. One consideration is to set the collation of your database so that it supports conversion of text data in files to appropriate Transact-SQL data types.
+
+The following example code creates a database named salesDB with a collation that makes it easier to import UTF-8 encoded text data into VARCHAR columns.
+
+CREATE DATABASE SalesDB
+    COLLATE Latin1_General_100_BIN2_UTF8
+
+Creating an external data source
+
+You can use the OPENROWSET function with a BULK path to query file data from your own database, just as you can in the master database; but if you plan to query data in the same location frequently, it's more efficient to define an external data source that references that location. For example, the following code creates a data source named files for the hypothetical https://mydatalake.blob.core.windows.net/data/files/ folder:
+
+CREATE EXTERNAL DATA SOURCE files
+WITH (
+    LOCATION = 'https://mydatalake.blob.core.windows.net/data/files/'
+)
+
+
+One benefit of an external data source, is that you can simplify an OPENROWSET query to use the combination of the data source and the relative path to the folders or files you want to query:
+
+SELECT *
+FROM
+    OPENROWSET(
+        BULK 'orders/*.csv',
+        DATA_SOURCE = 'files',
+        FORMAT = 'csv',
+        PARSER_VERSION = '2.0'
+    ) AS orders
+
+
+In this example, the BULK parameter is used to specify the relative path for all .csv files in the orders folder, which is a subfolder of the files folder referenced by the data source.
+
+Another benefit of using a data source is that you can assign a credential for the data source to use when accessing the underlying storage, enabling you to provide access to data through SQL without permitting users to access the data directly in the storage account. For example, the following code creates a credential that uses a shared access signature (SAS) to authenticate against the underlying Azure storage account hosting the data lake.
+
+CREATE DATABASE SCOPED CREDENTIAL sqlcred
+WITH
+    IDENTITY='SHARED ACCESS SIGNATURE',  
+    SECRET = 'sv=xxx...';
+GO
+
+CREATE EXTERNAL DATA SOURCE secureFiles
+WITH (
+    LOCATION = 'https://mydatalake.blob.core.windows.net/data/secureFiles/'
+    CREDENTIAL = sqlcred
+);
+GO
+
+
+ Tip
+
+In addition to SAS authentication, you can define credentials that use managed identity (the Microsoft Entra identity used by your Azure Synapse workspace), a specific Microsoft Entra principal, or passthrough authentication based on the identity of the user running the query (which is the default type of authentication). To learn more about using credentials in a serverless SQL pool, see the Control storage account access for serverless SQL pool in Azure Synapse Analytics article in Azure Synapse Analytics documentation.
+
+Creating an external file format
+
+While an external data source simplifies the code needed to access files with the OPENROWSET function, you still need to provide format details for the file being access; which may include multiple settings for delimited text files. You can encapsulate these settings in an external file format, like this:
+
+CREATE EXTERNAL FILE FORMAT CsvFormat
+    WITH (
+        FORMAT_TYPE = DELIMITEDTEXT,
+        FORMAT_OPTIONS(
+            FIELD_TERMINATOR = ',',
+            STRING_DELIMITER = '"'
+        )
+    );
+GO
+
+
+After creating file formats for the specific data files you need to work with, you can use the file format to create external tables, as discussed next.
+
+Creating an external table
+
+When you need to perform a lot of analysis or reporting from files in the data lake, using the OPENROWSET function can result in complex code that includes data sources and file paths. To simplify access to the data, you can encapsulate the files in an external table; which users and reporting applications can query using a standard SQL SELECT statement just like any other database table. To create an external table, use the CREATE EXTERNAL TABLE statement, specifying the column schema as for a standard table, and including a WITH clause specifying the external data source, relative path, and external file format for your data.
+
+CREATE EXTERNAL TABLE dbo.products
+(
+    product_id INT,
+    product_name VARCHAR(20),
+    list_price DECIMAL(5,2)
+)
+WITH
+(
+    DATA_SOURCE = files,
+    LOCATION = 'products/*.csv',
+    FILE_FORMAT = CsvFormat
+);
+GO
+
+-- query the table
+SELECT * FROM dbo.products;
+
+
+By creating a database that contains the external objects discussed in this unit, you can provide a relational database layer over files in a data lake, making it easier for many data analysts and reporting tools to access the data by using standard SQL query semantics.
+
+
+
+
+Understand Azure Synapse serverless SQL pool capabilities and use cases - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/query-data-lake-using-azure-synapse-serverless-sql-pools/2-understand-serverless-pools
+Understand Azure Synapse serverless SQL pool capabilities and use cases
+5 minutes
+
+Azure Synapse Analytics is an integrated analytics service that brings together a wide range of commonly used technologies for processing and analyzing data at scale. One of the most prevalent technologies used in data solutions is SQL - an industry standard language for querying and manipulating data.
+
+Serverless SQL pools in Azure Synapse Analytics
+
+Azure Synapse SQL is a distributed query system in Azure Synapse Analytics that offers two kinds of runtime environments:
+
+Serverless SQL pool: on-demand SQL query processing, primarily used to work with data in a data lake.
+Dedicated SQL pool: Enterprise-scale relational database instances used to host data warehouses in which data is stored in relational tables.
+
+In this module, we'll focus on serverless SQL pool, which provides a pay-per-query endpoint to query the data in your data lake. The benefits of using serverless SQL pool include:
+
+A familiar Transact-SQL syntax to query data in place without the need to copy or load data into a specialized store.
+Integrated connectivity from a wide range of business intelligence and ad-hoc querying tools, including the most popular drivers.
+Distributed query processing that is built for large-scale data, and computational functions - resulting in fast query performance.
+Built-in query execution fault-tolerance, resulting in high reliability and success rates even for long-running queries involving large data sets.
+No infrastructure to setup or clusters to maintain. A built-in endpoint for this service is provided within every Azure Synapse workspace, so you can start querying data as soon as the workspace is created.
+No charge for resources reserved, you're only charged for the data processed by queries you run.
+When to use serverless SQL pools
+
+Serverless SQL pool is tailored for querying the data residing in the data lake, so in addition to eliminating management burden, it eliminates a need to worry about ingesting the data into the system. You just point the query to the data that is already in the lake and run it.
+
+Synapse SQL serverless resource model is great for unplanned or "bursty" workloads that can be processed using the always-on serverless SQL endpoint in your Azure Synapse Analytics workspace. Using the serverless pool helps when you need to know exact cost for each query executed to monitor and attribute costs.
+
+ Note
+
+Serverless SQL pool is an analytics system and is not recommended for OLTP workloads such as databases used by applications to store transactional data. Workloads that require millisecond response times and are looking to pinpoint a single row in a data set are not good fit for serverless SQL pool.
+
+Common use cases for serverless SQL pools include:
+
+Data exploration: Data exploration involves browsing the data lake to get initial insights about the data, and is easily achievable with Azure Synapse Studio. You can browse through the files in your linked data lake storage, and use the built-in serverless SQL pool to automatically generate a SQL script to select TOP 100 rows from a file or folder just as you would do with a table in SQL Server. From there, you can apply projections, filtering, grouping, and most of the operation over the data as if the data were in a regular SQL Server table.
+Data transformation: While Azure Synapse Analytics provides great data transformations capabilities with Synapse Spark, some data engineers might find data transformation easier to achieve using SQL. Serverless SQL pool enables you to perform SQL-based data transformations; either interactively or as part of an automated data pipeline.
+Logical data warehouse: After your initial exploration of the data in the data lake, you can define external objects such as tables and views in a serverless SQL database. The data remains stored in the data lake files, but are abstracted by a relational schema that can be used by client applications and analytical tools to query the data as they would in a relational database hosted in SQL Server.
+
+
+
+
+Introduction - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/query-data-lake-using-azure-synapse-serverless-sql-pools/1-introduction
+Introduction
+1 minute
+
+Azure Synapse Analytics includes serverless SQL pools, which are tailored for querying data in a data lake. With a serverless SQL pool you can use SQL code to query data in files of various common formats without needing to load the file data into database storage. This capability helps data analysts and data engineers analyze and process file data in the data lake using a familiar data processing language, without the need to create or maintain a relational database store.
+
+After completing this module, you'll be able to:
+
+Identify capabilities and use cases for serverless SQL pools in Azure Synapse Analytics
+Query CSV, JSON, and Parquet files using a serverless SQL pool
+Create external database objects in a serverless SQL pool
+Prerequisites
+
+Before starting this module, you should have the following prerequisite skills and knowledge:
+
+Familiarity with the Microsoft Azure portal
+Familiarity with data lake and data warehouse concepts
+Experience of using SQL to query database tables
+
+
+
+
+Use Azure Synapse serverless SQL pool to query files in a data lake - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/query-data-lake-using-azure-synapse-serverless-sql-pools/
+
+Use Azure Synapse serverless SQL pool to query files in a data lake
+Module
+7 Units
+Feedback
+Beginner
+Data Engineer
+Azure Synapse Analytics
+
+With Azure Synapse serverless SQL pool, you can leverage your SQL skills to explore and analyze data in files, without the need to load the data into a relational database.
+
+Learning objectives
+
+After the completion of this module, you will be able to:
+
+Identify capabilities and use cases for serverless SQL pools in Azure Synapse Analytics
+Query CSV, JSON, and Parquet files using a serverless SQL pool
+Create external database objects in a serverless SQL pool
+Add
+Prerequisites
+
+Consider completing the Explore data analytics in Azure and Get started querying with Transact-SQL learning paths before starting this module. You will need knowledge of:
+
+Analytical data workloads in Microsoft Azure
+Querying data with Transact-SQL
+Introduction
+min
+Understand Azure Synapse serverless SQL pool capabilities and use cases
+min
+Query files using a serverless SQL pool
+min
+Create external database objects
+min
+Exercise - Query files using a serverless SQL pool
+min
+Knowledge check
+min
+Summary
+min
+
+
+Summary - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/introduction-azure-synapse-analytics/6-summary
+Summary
+1 minute
+
+Azure Synapse Analytics provides an integrated cloud-based platform for big data processing and analysis. You can use it to build descriptive, diagnostic, predictive, and prescriptive analytics solutions.
+
+In this module, you learned how to:
+
+Identify the business problems that Azure Synapse Analytics addresses.
+Describe core capabilities of Azure Synapse Analytics.
+Determine when to use Azure Synapse Analytics.
+
+ Tip
+
+To learn more about the capabilities of Azure Synapse Analytics, see What is Azure Synapse Analytics? in the Azure Synapse Analytics documentation.
+
+
+
+
+Knowledge check - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/introduction-azure-synapse-analytics/5-knowledge-check
+Knowledge check
+3 minutes
+1. 
+
+Which feature of Azure Synapse Analytics enables you to transfer data from one store to another and apply transformations to the data at scheduled intervals?
+
+ 
+
+Serverless SQL pool
+
+Apache Spark pool
+
+Pipelines
+
+2. 
+
+You want to create a data warehouse in Azure Synapse Analytics in which the data is stored and queried in a relational data store. What kind of pool should you create?
+
+ 
+
+Serverless SQL pool
+
+Dedicated SQL pool
+
+Apache Spark pool
+
+3. 
+
+A data analyst wants to analyze data by using Python code combined with text descriptions of the insights gained from the analysis. What should they use to perform the analysis?
+
+ 
+
+A notebook connected to an Apache Spark pool.
+
+A SQL script connected to a serverless SQL pool.
+
+A KQL script connected to a Data Explorer pool.
+
+Check your answers
+
+
+
+
+Exercise - Explore Azure Synapse Analytics - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/introduction-azure-synapse-analytics/4a-exercise-explore-synapse
+Exercise - Explore Azure Synapse Analytics
+60 minutes
+
+Now it's your chance to explore the capabilities of Azure Synapse Analytics for yourself. In this exercise, you'll use a provided script to provision an Azure Synapse Analytics workspace in your Azure subscription; and then use Azure Synapse Studio to perform core data analytics tasks.
+
+ Note
+
+To complete this lab, you will need an Azure subscription in which you have administrative access.
+
+Launch the exercise and follow the instructions.
+
+
+
+
+When to use Azure Synapse Analytics - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/introduction-azure-synapse-analytics/4-when-use
+When to use Azure Synapse Analytics
+4 minutes
+
+Across all organizations and industries, the common use cases for Azure Synapse Analytics are identified by the need for:
+
+Large-scale data warehousing
+
+Data warehousing includes the need to integrate all data, including big data, to reason over data for analytics and reporting purposes from a descriptive analytics perspective, independent of its location or structure.
+
+Advanced analytics
+
+Enables organizations to perform predictive analytics using both the native features of Azure Synapse Analytics, and integrating with other technologies such as Azure Machine Learning.
+
+Data exploration and discovery
+
+The serverless SQL pool functionality provided by Azure Synapse Analytics enables Data Analysts, Data Engineers and Data Scientist alike to explore the data within your data estate. This capability supports data discovery, diagnostic analytics, and exploratory data analysis.
+
+Real time analytics
+
+Azure Synapse Analytics can capture, store and analyze data in real-time or near-real time with features such as Azure Synapse Link, or through the integration of services such as Azure Stream Analytics and Azure Data Explorer.
+
+Data integration
+
+Azure Synapse Pipelines enables you to ingest, prepare, model and serve the data to be used by downstream systems. This can be used by components of Azure Synapse Analytics exclusively.
+
+Integrated analytics
+
+With the variety of analytics that can be performed on the data at your disposal, putting together the services in a cohesive solution can be a complex operation. Azure Synapse Analytics removes this complexity by integrating the analytics landscape into one service. That way you can spend more time working with the data to bring business benefit, than spending much of your time provisioning and maintaining multiple systems to achieve the same outcomes.
+
+
+
+
+How Azure Synapse Analytics works - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/introduction-azure-synapse-analytics/3-how-works
+How Azure Synapse Analytics works
+8 minutes
+
+To support the analytics needs of today's organizations, Azure Synapse Analytics combines a centralized service for data storage and processing with an extensible architecture through which linked services enable you to integrate commonly used data stores, processing platforms, and visualization tools.
+
+Creating and using an Azure Synapse Analytics workspace
+
+A Synapse Analytics workspace defines an instance of the Synapse Analytics service in which you can manage the services and data resources needed for your analytics solution. You can create a Synapse Analytics workspace in an Azure subscription interactively by using the Azure portal, or you can automate deployment by using Azure PowerShell, the Azure command-line interface (CLI), or with an Azure Resource Manager or Bicep template.
+
+After creating a Synapse Analytics workspace, you can manage the services in it and perform data analytics tasks with them by using Synapse Studio; a web-based portal for Azure Synapse Analytics.
+
+Working with files in a data lake
+
+One of the core resources in a Synapse Analytics workspace is a data lake, in which data files can be stored and processed at scale. A workspace typically has a default data lake, which is implemented as a linked service to an Azure Data Lake Storage Gen2 container. You can add linked services for multiple data lakes that are based on different storage platforms as required.
+
+Ingesting and transforming data with pipelines
+
+In most enterprise data analytics solutions, data is extracted from multiple operational sources and transferred to a central data lake or data warehouse for analysis. Azure Synapse Analytics includes built-in support for creating, running, and managing pipelines that orchestrate the activities necessary to retrieve data from a range of sources, transform the data as required, and load the resulting transformed data into an analytical store.
+
+ Note
+
+Pipelines in Azure Synapse Analytics are based on the same underlying technology as Azure Data Factory. If you are already familiar with Azure Data Factory, you can leverage your existing skills to build data ingestion and transformation solutions in Azure Synapse Analytics.
+
+Querying and manipulating data with SQL
+
+Structured Query Language (SQL) is a ubiquitous language for querying and manipulating data, and is the foundation for relational databases, including the popular Microsoft SQL Server database platform. Azure Synapse Analytics supports SQL-based data querying and manipulation through two kinds of SQL pool that are based on the SQL Server relational database engine:
+
+A built-in serverless pool that is optimized for using relational SQL semantics to query file-based data in a data lake.
+Custom dedicated SQL pools that host relational data warehouses.
+
+The Azure Synapse SQL system uses a distributed query processing model to parallelize SQL operations, resulting in a highly scalable solution for relational data processing. You can use the built-in serverless pool for cost-effective analysis and processing of file data in the data lake, and use dedicated SQL pools to create relational data warehouses for enterprise data modeling and reporting.
+
+Processing and analyzing data with Apache Spark
+
+Apache Spark is an open source platform for big data analytics. Spark performs distributed processing of files in a data lake by running jobs that can be implemented using any of a range of supported programming languages. Languages supported in Spark include Python, Scala, Java, SQL, and C#.
+
+In Azure Synapse Analytics, you can create one or more Spark pools and use interactive notebooks to combine code and notes as you build solutions for data analytics, machine learning, and data visualization.
+
+Exploring data with Data Explorer
+
+Azure Synapse Data Explorer is a data processing engine in Azure Synapse Analytics that is based on the Azure Data Explorer service. Data Explorer uses an intuitive query syntax named Kusto Query Language (KQL) to enable high performance, low-latency analysis of batch and streaming data.
+
+Integrating with other Azure data services
+
+Azure Synapse Analytics can be integrated with other Azure data services for end-to-end analytics solutions. Integrated solutions include:
+
+Azure Synapse Link enables near-realtime synchronization between operational data in Azure Cosmos DB, Azure SQL Database, SQL Server, and Microsoft Power Platform Dataverse and analytical data storage that can be queried in Azure Synapse Analytics.
+Microsoft Power BI integration enables data analysts to integrate a Power BI workspace into a Synapse workspace, and perform interactive data visualization in Azure Synapse Studio.
+Microsoft Purview integration enables organizations to catalog data assets in Azure Synapse Analytics, and makes it easier for data engineers to find data assets and track data lineage when implementing data pipelines that ingest data into Azure Synapse Analytics.
+Azure Machine Learning integration enables data analysts and data scientists to integrate predictive model training and consumption into analytical solutions.
+
+
+
+
+Introduction - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/introduction-azure-synapse-analytics/1-introduction
+Introduction
+1 minute
+
+The volume of data generated by individuals and organizations is growing at a phenomenal rate. This data powers businesses and other organizations by providing a basis for descriptive, diagnostic, predictive, and prescriptive analytical solutions that support decision making and autonomous systems by providing real-time insights into established and emerging patterns.
+
+Organizations have a choice of many tools and techniques for data analytics, often requiring expertise across multiple systems and complex integration of infrastructure and administrative operations. Azure Synapse Analytics provides a single, cloud-scale platform that supports multiple analytical technologies; enabling a consolidated and integrated experience for data engineers, data analysts, data scientists, and other professionals who need to work with data.
+
+In this module, you'll learn how to:
+
+Identify the business problems that Azure Synapse Analytics addresses.
+Describe core capabilities of Azure Synapse Analytics.
+Determine when to use Azure Synapse Analytics.
+Prerequisites
+
+Before completing this module, you should have the following prerequisite knowledge and experience:
+
+Familiarity with cloud computing concepts and Microsoft Azure.
+Familiarity with fundamental data concepts.
+
+
+
+
+What is Azure Synapse Analytics - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/introduction-azure-synapse-analytics/2-what-happening-business
+What is Azure Synapse Analytics
+5 minutes
+
+The technological research and consulting firm Gartner defines four common types of analytical technique that organizations commonly use:
+
+Descriptive analytics, which answers the question “What is happening in my business?”. The data to answer this question is typically answered through the creation of a data warehouse in which historical data is persisted in relational tables for multidimensional modeling and reporting.
+
+Diagnostic analytics, which deals with answering the question “Why is it happening?”. This may involve exploring information that already exists in a data warehouse, but typically involves a wider search of your data estate to find more data to support this type of analysis.
+
+Predictive analytics, which enables you to answer the question “What is likely to happen in the future based on previous trends and patterns?”
+
+Prescriptive analytics, which enables autonomous decision making based on real-time or near real-time analysis of data, using predictive analytics.
+
+Azure Synapse Analytics provides a cloud platform for all of these analytical workloads through support for multiple data storage, processing, and analysis technologies in a single, integrated solution. The integrated design of Azure Synapse Analytics enables organizations to leverage investments and skills in multiple commonly used data technologies, including SQL, Apache Spark, and others; while providing a centrally managed service and a single, consistent user interface.
+
+
+
+
+Introduction to Azure Synapse Analytics - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/introduction-azure-synapse-analytics/
+
+Introduction to Azure Synapse Analytics
+Module
+7 Units
+Feedback
+Beginner
+Data Analyst
+Data Engineer
+Azure Synapse Analytics
+
+Learn about the features and capabilities of Azure Synapse Analytics - a cloud-based platform for big data processing and analysis.
+
+Learning objectives
+
+In this module, you'll learn how to:
+
+Identify the business problems that Azure Synapse Analytics addresses.
+Describe core capabilities of Azure Synapse Analytics.
+Determine when to use Azure Synapse Analytics.
+Add
+Prerequisites
+
+Before completing this module, you should have the following prerequisite knowledge and experience:
+
+Familiarity with cloud computing concepts and Microsoft Azure.
+Familiarity with fundamental data concepts.
+Introduction
+min
+What is Azure Synapse Analytics
+min
+How Azure Synapse Analytics works
+min
+When to use Azure Synapse Analytics
+min
+Exercise - Explore Azure Synapse Analytics
+min
+Knowledge check
+min
+Summary
+min
+
+
+Summary - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/integrate-microsoft-purview-azure-synapse-analytics/08-summary
+Summary
+1 minute
+
+Comprehensive data governance is an important element of an enterprise data analytics solution. By combining Azure Synapse Analytics and Microsoft Purview, you can improve data discoverability while addressing data trustworthiness and compliance requirements across your data estate.
+
+In this module you learned how to:
+
+Catalog Azure Synapse Analytics database assets in Microsoft Purview.
+Configure Microsoft Purview integration in Azure Synapse Analytics.
+Search the Microsoft Purview catalog from Synapse Studio.
+Track data lineage in Azure Synapse Analytics pipelines activities.
+
+
+
+
+Knowledge check - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/integrate-microsoft-purview-azure-synapse-analytics/07-knowledge-check
+Knowledge check
+4 minutes
+1. 
+
+You want to scan data assets in a dedicated SQL pool in your Azure Synapse Analytics workspace. What kind of source should you register in Microsoft Purview?
+
+ 
+
+Azure Synapse Analytics
+
+Azure Data Lake Storage Gen2
+
+Azure SQL Database
+
+2. 
+
+You want to scan data assets in the default data lake used by your Azure Synapse Analytics workspace. What kind of source should you register in Microsoft Purview?
+
+ 
+
+Azure Synapse Analytics
+
+Azure Data Lake Storage Gen2
+
+Azure Cosmos DB
+
+3. 
+
+You want data analysts using Synapse Studio to be able to find data assets that are registered in a Microsoft Purview collection. What should you do?
+
+ 
+
+Register an Azure Synapse Analytics source in the Purview account
+
+Add a Data Explorer pool to the Synapse Workspace
+
+Connect the Purview account to the Synapse analytics workspace
+
+4. 
+
+Which of the following pipeline activities records data lineage data in a connected Purview account?
+
+ 
+
+Get Metadata
+
+Copy Data
+
+Lookup
+
+Check your answers
+
+
+
+
+Exercise - Integrate Azure Synapse Analytics and Microsoft Purview - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/integrate-microsoft-purview-azure-synapse-analytics/06-exercise-synapse-purview
+Exercise - Integrate Azure Synapse Analytics and Microsoft Purview
+40 minutes
+
+Now it's your chance to explore integration between Microsoft Purview and Azure Synapse Analytics for yourself. In this exercise, you'll use a provided script to provision an Azure Synapse Analytics workspace and a Microsoft Purview account in your Azure subscription; and then you'll catalog data assets in your Azure Synapse Analytics workspace and data lake before connecting the Purview account to the workspace to support data discovery and lineage tracking.
+
+ Note
+
+To complete this lab, you will need an Azure subscription in which you have administrative access.
+
+Launch the exercise and follow the instructions.
+
+
+
+
+Track data lineage in pipelines - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/integrate-microsoft-purview-azure-synapse-analytics/05-track-data-lineage
+Track data lineage in pipelines
+4 minutes
+
+In a typical large-scale analytics solution, data is transferred and transformed across multiple systems until it's loaded into an analytical data store for reporting and analysis. Tracking the lineage of data as moves across the enterprise is an important factor in determining the provenance, trustworthiness, and recency of data assets used to inform analysis and decision making.
+
+Generate and view data lineage information
+
+In Azure Synapse Analytics, data movement and transformation is managed by using pipelines, which consist of an orchestrated set of activities that operate on data. The design and implementation of pipelines is too large a subject to cover in depth in this module, but a key point to be aware of is that there are two activity types available in Synapse Analytics pipelines that automatically generate data lineage information in a connected Purview catalog:
+
+The Copy Data activity
+The Data Flow activity
+
+Running a pipeline that includes either of these activities in a workspace with a connected Purview account will result in the creation or update of data assets with lineage information. The assets recorded include:
+
+The source from which the data is extracted.
+The activity used to transfer the data.
+The destination where the data is stored.
+
+In the Microsoft Purview Governance Portal, you can open the assets in the Purview catalog, and view the lineage information as shown here:
+
+You can also view the lineage for a pipeline activity in Synapse Studio.
+
+ Tip
+
+For more information about tracking data lineage for Azure Synapse Analytics pipelines in Microsoft Purview, see How to get lineage from Azure Synapse Analytics into Microsoft Purview.
+
+You'll get a chance to generate and view data lineage from a Synapse Analytics pipeline in the exercise later in this module.
+
+
+
+
+Search a Purview catalog in Synapse Studio - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/integrate-microsoft-purview-azure-synapse-analytics/04-search-purview
+Search a Purview catalog in Synapse Studio
+4 minutes
+
+After connecting an Azure Synapse Analytics workspace to a Microsoft Purview account, you can search the Purview catalog from Synapse Studio. This ability to discover and examine data assets from across the enterprise can greatly assist data engineers, data analysts, and other consumers of data by providing a curated catalog of documented data sources for analysis and reporting.
+
+Search the Purview catalog in Synapse Studio
+
+You can search the catalog from a connected Purview account by using the Search bar in the Data, Develop, or Integrate pages in Synapse Studio, as shown here:
+
+The search results interface, and the details for each asset found reflect the user interface in the Microsoft Purview Governance Portal, ensuring that the data discovery and examination experience in Synapse Studio is consistent for users of Microsoft Purview in its own portal.
+
+ Tip
+
+For more information about searching the Purview catalog in Synapse Studio, see Discover, connect, and explore data in Synapse using Microsoft Purview.
+
+You'll get a chance to try searching a connected Purview account for yourself in the exercise later in this module.
+
+
+
+
+Connect Microsoft Purview to an Azure Synapse Analytics workspace - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/integrate-microsoft-purview-azure-synapse-analytics/03-configure-purview-integration
+Connect Microsoft Purview to an Azure Synapse Analytics workspace
+5 minutes
+
+So far, you've learned how you can use Azure Synapse Analytics data stores as sources for a Microsoft Purview catalog; which is similar in most respects to using any other data source.
+
+What sets Azure Synapse Analytics apart from many other data sources is the ability to configure direct integration between an Azure Synapse Analytics workspace and a Microsoft Purview account. By linking your workspace to a Purview account, you can:
+
+Search the Purview catalog in the Synapse Studio user interface.
+Push details of data pipeline activities to Purview in order to track data lineage information.
+Connect a Purview account to a Synapse Analytics workspace
+
+You connect a Microsoft Purview account to an Azure Synapse Analytics workspace on the Manage page of Synapse Studio, as shown here:
+
+Security considerations
+
+To connect a Purview account by using the Synapse Studio interface, you require Collection Administrator access to the Purview account's root collection. After successfully connecting the account, the managed identity used by your Azure Synapse Analytics workspace will be added to the collection's Data Curator role.
+
+If your Microsoft Purview account is behind a firewall, you need to create a managed endpoint, and configure the connection to access Purview using that endpoint. For more information, see Access a secured Microsoft Purview account from Azure Synapse Analytics.
+
+ Tip
+
+To learn more about connecting Azure Synapse Analytics to Microsoft Purview, see QuickStart: Connect a Synapse workspace to a Microsoft Purview account.
+
+You'll get a chance to connect an Azure Synapse Analytics workspace to a Microsoft Purview account in the exercise later in this module.
+
+
+
+
+Catalog Azure Synapse Analytics data assets in Microsoft Purview - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/integrate-microsoft-purview-azure-synapse-analytics/02-catalog-azure-synapse
+Catalog Azure Synapse Analytics data assets in Microsoft Purview
+8 minutes
+
+Azure Synapse Analytics is a platform for cloud-scale analytics workloads that process data in multiple sources; including:
+
+Relational databases in serverless and dedicated SQL pools
+Files in Azure Data Lake Storage Gen2
+
+A comprehensive data analytics solution can include many folders and files in a data lake, and multiple databases that each contain many tables, each with multiple fields. For a data analyst, finding and understanding the data assets associated with a Synapse Analytics workspace can present a significant challenge before any analysis or reporting can even begin.
+
+Microsoft Purview can help in this scenario by cataloging the data assets in a data map, and enabling data stewards to add metadata, categorization, subject matter contact details, and other information that helps data analysts identify and understand data.
+
+Configure data access for Microsoft Purview
+
+In order to scan the data assets in the data lake storage and databases used in your Azure Synapse Workspace, Microsoft Purview must have appropriate permissions to read the data. In practice, this means that the account used by your Microsoft Purview account (usually a system-assigned managed identity that is created when Microsoft Purview is provisioned) needs to be a member of the appropriate role-based access control (RBAC) and database roles.
+
+The diagram shows that Microsoft Purview requires role membership that permits the following access:
+
+Read access to the Azure Synapse workspace (achieved through membership of the Reader role for the Azure Synapse Workspace resource in the Azure subscription).
+Read access to each SQL database that will be scanned (achieved through membership of the db_datareader fixed database role in each database).
+Read access to data lake storage (achieved through membership of the Storage Blob Data Reader role for the Azure Storage account hosting the Azure Data Lake Storage Gen2 container for the data lake).
+
+ Tip
+
+Learn more:
+
+For more information about RBAC in Microsoft Azure, see What is Azure role-based access control (Azure RBAC)?
+For more information about database-level roles in Azure Synapse Analytics SQL pools, see Database-level roles.
+
+You'll get a chance to assign RBAC and SQL database role membership to support Microsoft Purview data access for yourself in the exercise later in this module.
+
+Register and scan data sources
+
+Microsoft Purview supports the creation of a data map that catalogs data assets in collections by scanning registered sources. Collections form a hierarchy of logical groupings of related data assets, under a root collection that is created when you provision a Microsoft Purview account. You can use the Microsoft Purview Governance Portal to create and manage collections in your account.
+
+To include assets from a particular data source, you need to register the source in a collection. Microsoft Purview supports many kinds of source, including:
+
+Azure Synapse Analytics - One or more SQL databases in a Synapse Analytics workspace.
+Azure Data Lake Storage Gen2 - Blob containers used to host folders and files in a data lake.
+
+To catalog assets used in an Azure Synapse Analytics workspace, you can register one or both of these sources in a collection, as shown here:
+
+After registering the sources where your data assets are stored, you can scan each source to catalog the assets it contains. You can scan each source interactively, and you can schedule period scans to keep the data map up to date.
+
+ Tip
+
+To learn more about registering and scanning sources, see Scans and ingestion in Microsoft Purview.
+
+You'll get a chance to register and scan sources for an Azure Synapse Analytics workspace in the exercise later in this module.
+
+View and manage cataloged data assets
+
+As each scan finds data assets in the registered sources, they're added to the associated collection in the data catalog. You can query the data catalog in the Microsoft Purview Governance Portal to view and filter the data assets, as shown here:
+
+Data assets include items in the registered data stores at multiple levels. For example, assets from an Azure Synapse Analytics source include databases, schemas, tables, and individual fields; and assets from an Azure Data Lake Storage Gen 2 source include containers, folders, and files.
+
+You can view and edit the properties of each asset to add contextual information such as descriptions, contacts for expert help, and other useful metadata. Data assets can also be classified using built-in or custom classifications that match specific patterns of data field to common types of data - for example, passport numbers, credit card numbers, and others.
+
+ Tip
+
+To learn more about data asset classification, see Data classification in the Microsoft Purview governance portal.
+
+
+
+
+Introduction - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/integrate-microsoft-purview-azure-synapse-analytics/01-introduction
+Introduction
+1 minute
+
+Microsoft Purview is a cloud service that provides the basis of a data governance solution in which you can catalog, classify, and track data assets across a large-scale data estate.
+
+Azure Synapse Analytics is a cloud-scale data analytics suite that supports data ingestion and transformation, distributed big data processing and exploration with SQL and Spark, and enterprise data warehousing.
+
+When combined, Microsoft Purview and Azure Synapse Analytics can be used to create a comprehensive solution for reliable, massively scalable data analytics with rich data asset discovery and lineage tracking capabilities.
+
+In this module you'll learn how to:
+
+Catalog Azure Synapse Analytics database assets in Microsoft Purview.
+Configure Microsoft Purview integration in Azure Synapse Analytics.
+Search the Microsoft Purview catalog from Synapse Studio.
+Track data lineage in Azure Synapse Analytics pipelines activities.
+
+
+
+
+Integrate Microsoft Purview and Azure Synapse Analytics - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/integrate-microsoft-purview-azure-synapse-analytics/
+
+Integrate Microsoft Purview and Azure Synapse Analytics
+Module
+8 Units
+Feedback
+Intermediate
+Data Analyst
+Data Engineer
+Azure Synapse Analytics
+Microsoft Purview
+
+Learn how to integrate Microsoft Purview with Azure Synapse Analytics to improve data discoverability and lineage tracking.
+
+Learning objectives
+
+After completing this module, you'll be able to:
+
+Catalog Azure Synapse Analytics database assets in Microsoft Purview.
+Configure Microsoft Purview integration in Azure Synapse Analytics.
+Search the Microsoft Purview catalog from Synapse Studio.
+Track data lineage in Azure Synapse Analytics pipelines activities.
+Add
+Prerequisites
+
+Before starting this module, you should be familiar with both Azure Synapse Analytics and Microsoft Purview. Consider completing the following modules before starting this one:
+
+Introduction to Azure Synapse Analytics
+Introduction to Microsoft Purview
+Introduction
+min
+Catalog Azure Synapse Analytics data assets in Microsoft Purview
+min
+Connect Microsoft Purview to an Azure Synapse Analytics workspace
+min
+Search a Purview catalog in Synapse Studio
+min
+Track data lineage in pipelines
+min
+Exercise - Integrate Azure Synapse Analytics and Microsoft Purview
+min
+Knowledge check
+min
+Summary
+min
+
+
+Summary - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/manage-power-bi-artifacts-use-microsoft-purview/6-summary
+Summary
+2 minutes
+
+As data grows in your organization, tracking its origins and evolution becomes more and more difficult. Microsoft Purview makes it possible to see end-to-end lineage of data sources both in Power BI and extending to the data platform.
+
+From an enterprise perspective, the ability to scan and view data across your entire Power BI tenant is critical. Microsoft Purview enables users to find trusted data and also to troubleshoot and understand dependencies across the analytics landscape.
+
+Learn more
+Register and scan a Power BI tenant in Microsoft Purview
+
+
+
+
+Knowledge check - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/manage-power-bi-artifacts-use-microsoft-purview/5-knowledge-check
+Knowledge check
+3 minutes
+
+Choose the best response for each of the questions below. Then select Check your answers.
+
+Check your knowledge
+1. 
+
+What are the prerequisite steps to register and scan a Power BI tenant in Microsoft Purview?
+
+ 
+
+Set up authentication between Purview and Power BI, and configure the Power BI tenant.
+
+Set up and deploy a Power BI data gateway.
+
+Configure the Power BI tenant only.
+
+2. 
+
+What steps are required in the Power BI admin portal to enable the scanning and display of enhanced metadata?
+
+ 
+
+There are no other steps required. Enhanced metadata displays by default.
+
+Enable enhanced metadata scanning in the Azure portal.
+
+Enable an admin API setting in the Power BI admin portal.
+
+3. 
+
+What details of an asset would be helpful in performing an impact analysis?
+
+ 
+
+Lineage.
+
+Properties.
+
+Schema.
+
+Check your answers
+
+
+
+
+View Power BI metadata and lineage - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/manage-power-bi-artifacts-use-microsoft-purview/4-view-lineage
+View Power BI metadata and lineage
+4 minutes
+
+Purview and Power BI together are powerful, enhancing the ability of the search and browse features to see both the schema and lineage of Power BI assets.
+
+Extend your search with enhanced metadata
+
+Metadata scanning facilitates governance by making it possible to catalog and report on the metadata of your organization's Power BI artifacts. The results of metadata scanning are displayed on the schema tab of the asset.
+
+ Note
+
+Metadata scanning must be enabled in the Power BI admin portal. See Set up metadata scanning in your organization to learn more.
+
+After performing a search in the Purview Governance Portal, select a Power BI asset from your search result to see the sensitivity labels and endorsement metadata. Additional business metadata includes the dataset user configuration, create datetime, and description.
+
+Under the Schema tab, you can see the list of all the tables, columns, and measures created inside the Power BI dataset.
+
+For more detail, selecting a particular field within the schema tab will take you to the details for that field. You can then view the overview, properties, lineage, contacts, and related assets for that particular field.
+
+Metadata scanning requires no special license. It works for all of your tenant metadata, including items that are located in non-Premium workspaces.
+
+If you'd like more information about assets, you also have the option open the Power BI dataset in the Power BI service for further analytics, root-cause investigation, impact analysis, management tasks, and dataset enrichment.
+
+Extend your search with lineage
+
+If you're using the search and browse features in Microsoft Purview to find assets for reporting or to troubleshoot existing assets, you likely need more information on where data actually comes from, and what transformation steps it has undergone. The lineage view displays the flow of data from the source through to Power BI assets, including dataflows, datasets, reports, and dashboards.
+
+Although you can track data lineage in Power BI, this information is limited to the items in a single workspace. Lineage in Purview enables you to view the movement of data across more than one workspace, in a single view.
+
+Lineage enables easy troubleshooting and deeper analysis of analytics projects. You're able to look both up and down-stream, to perform either root cause or impact analysis.
+
+For example, you can detect the Azure Synapse Analytics pipeline that is responsible for the transformation of the data upstream of Power BI.
+
+In the Purview Governance Portal, lineage is displayed from the asset you're currently viewing.
+
+
+
+
+Search and browse Power BI assets - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/manage-power-bi-artifacts-use-microsoft-purview/3-search-browse-assets
+Search and browse Power BI assets
+4 minutes
+
+After data is registered and scanned, analysts and data consumers need to be able to find data, view enhanced metadata, and track data lineage. Search and browse in the Purview Data Catalog enables you to quickly find trustworthy data.
+
+After scanning your Power BI tenant, you'll see those assets appear in the search results, including underlying data sources.
+
+Search the Microsoft Purview Data Catalog
+
+From the Microsoft Purview Governance Portal, you can type relevant keywords to start discovering assets. In this scenario, you're looking for "sales."
+
+The screenshot below displays the search result, with all assets corresponding to the keywords entered in the search engine. Notice the appearance of Power BI assets.
+
+You can fine-tune your search using the filters on the left side of the page. Filters available include source type, keyword, object type, collection, classification, contact, label, and glossary term.
+
+Browse the Microsoft Purview Data Catalog
+
+Searching for specific assets is great if you know what you're looking for, but analysts and data consumers may not know exactly how their data estate is structured. The browse experience enables you to explore what data is available, either by collection or through traversing the hierarchy of each data source in the catalog.
+
+To access the browse experience, select Browse assets from the governance portal home page.
+
+You can browse the data catalog either by collection or by source type, depending on your needs. Browsing by either collection or source type allows you to see assets you have access to. Once you find the asset you're looking for, you can select it to see details on schema, lineage, and a detailed classification list.
+
+Uniquely, browsing by source type allows you to see the hierarchies of data sources using an explorer view. This is a helpful and familiar way to navigate to see lists of scanned assets.
+
+ Note
+
+Assets in Purview are organized by collection and permissions are granted at collection level. Both searching and browsing require data reader permissions. See Access control in the Microsoft Purview Data Map for details on permissions.
+
+Select an asset to see details about the properties, schema, lineage, contacts, and related assets.
+
+
+
+
+Register and scan a Power BI tenant - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/manage-power-bi-artifacts-use-microsoft-purview/2-register-scan-tenant
+Register and scan a Power BI tenant
+4 minutes
+
+To get an understanding of what is going on in your Power BI tenant, you can perform a full scan in Microsoft Purview to view the schema and lineage of assets across all workspaces. After, you can schedule incremental scans on workspaces that have changed since the previous scan.
+
+There are a few pre-requisite steps required to scan your Power BI tenant in Microsoft Purview.
+
+ Tip
+
+If you need to create a Microsoft Purview account, see the quickstart guide to create a Microsoft Purview account in the Azure Portal.
+
+Establish a connection between Microsoft Purview and Power BI
+
+Microsoft Purview can connect to and scan Power BI either in the same tenant or across tenants. You'll need to set up authentication either by using a Managed Identity or a Delegated Authentication.
+
+ Note
+
+See Register and scan a Power BI tenant to learn more about the set-up and authentication of Power BI connections in same and cross-tenant scenarios.
+
+Authenticate to Power BI tenant
+
+Give Microsoft Purview permissions to access your Power BI tenant.
+
+If you're using Managed Identity to authenticate to Power BI, you'll need to create a security group in Microsoft Entra ID, and add your Microsoft Purview managed identity to this security group.
+
+If a security group containing the Purview managed identity already exists, you can proceed to configuring the Power BI tenant.
+
+Configure Power BI tenant
+
+Next you need to enable access to Power BI by Microsoft Purview in Power BI itself. This is done by enabling Allow service principals to use read-only Power BI admin APIs in the Power BI admin portal.
+
+Register and scan Power BI
+
+Now that you've got access set up in both Microsoft Purview and Power BI, you can register and scan your Power BI tenant.
+
+After registering the Power BI tenant, initiate the scan by selecting New scan. Give your scan a name and step through the interface, where you'll be able to to exclude personal workspaces, confirm integration runtime and credentials, and select a collection. Test the connection to ensure authentication is set up properly.
+
+ Note
+
+If you're performing the scan, you must be both a Data Source Administrator and a Data Reader. See Access control in the Microsoft Purview Data Map for details on permissions.
+
+You're able to track the progress of the scan in the data map, and once the scan is complete, you'll be able to search and browse the contents of your entire Power BI tenant!
+
+If you're having any issues with scanning your Power BI tenant, see Troubleshoot Power BI tenant scans in Microsoft Purview for details and helpful hints.
+
+
+
+
+Introduction - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/manage-power-bi-artifacts-use-microsoft-purview/1-introduction
+Introduction
+3 minutes
+
+As the landscape of enterprise data continues to grow, it's critical to get an accurate view of your organization's data. Microsoft Purview and Power BI integration enables you to scan your entire Power BI tenant to search and browse Power BI assets, explore enhanced dataset metadata, trace end-to-end data lineage, and drill-down into datasets in Power BI for further analysis.
+
+Learning objectives
+
+In this module, you will:
+
+Register and scan a Power BI tenant.
+Use the search and browse functions to find data assets.
+Describe the schema details and data lineage tracing of Power BI data assets.
+
+
+
+
+Manage Power BI assets by using Microsoft Purview - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/manage-power-bi-artifacts-use-microsoft-purview/
+
+Manage Power BI assets by using Microsoft Purview
+Module
+6 Units
+Feedback
+Beginner
+Data Analyst
+Data Engineer
+Power BI
+Microsoft Purview
+
+Improve data governance and asset discovery using Power BI and Microsoft Purview integration.
+
+Learning objectives
+
+By the end of this module, you’ll be able to:
+
+Register and scan a Power BI tenant.
+Use the search and browse functions to find data assets.
+Describe the schema details and data lineage tracing of Power BI data assets.
+Add
+Prerequisites
+Familiarity with the Azure data ecosystem.
+Introduction
+min
+Register and scan a Power BI tenant
+min
+Search and browse Power BI assets
+min
+View Power BI metadata and lineage
+min
+Knowledge check
+min
+Summary
+min
+
+
+Summary - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/catalog-data-artifacts-use-microsoft-purview/6-summary
+Summary
+3 minutes
+
+Data classification in Microsoft Purview is similar to subject tagging, and is used to mark and identify data of a specific type that's found within your data estate during scanning. Classification is based on the business context of the data.
+
+Prior to data classification and labeling, data assets must be registered and scanned in Microsoft Purview. After assets are registered, scanned, classified, and labeled, analysts and other data consumers can easily identify and use data assets.
+
+Learn more
+Quickstart: Create an account in the Microsoft Purview governance portal
+Microsoft Purview how-to guides
+
+
+
+
+Knowledge check - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/catalog-data-artifacts-use-microsoft-purview/5-knowledge-check
+Knowledge check
+3 minutes
+
+Choose the best response for each of the questions below. Then select Check your answers.
+
+Check your knowledge
+1. 
+
+What level are user permissions set at in Microsoft Purview?
+
+ 
+
+Tenant.
+
+Data catalog.
+
+Collection.
+
+2. 
+
+What are the two types of classification in Microsoft Purview?
+
+ 
+
+System classifications and custom classifications.
+
+Microsoft Information Protection Sensitivity Labels and system classifications.
+
+Custom classifications and user-defined classifications.
+
+3. 
+
+If a data analyst is looking for a specific resource for reporting, what should they use?
+
+ 
+
+Purview Data Catalog to search.
+
+The business glossary.
+
+Import into Power BI and create a custom report.
+
+Check your answers
+
+
+
+
+Search the data catalog - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/catalog-data-artifacts-use-microsoft-purview/4-search-data-catalog
+Search the data catalog
+3 minutes
+
+A data catalog search can empower business and data analysts to find and interpret data. The data catalog provides intelligent recommendations based on data relationships, business context, and search history. The Purview data catalog can assist data teams by adding business context to assets to drive analytics, AI and ML initiatives.
+
+The data catalog can be searched by keyword, object type, collection, classification, contact, label, or assigned term. Results can then be sorted by relevance or name.
+
+For more information about searching for trusted assets for reporting, see Discover trusted data using Microsoft Purview.
+
+
+
+
+Classify and label data - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/catalog-data-artifacts-use-microsoft-purview/3-classify-data
+Classify and label data
+6 minutes
+
+Glossary terms, classifications and labels are all annotations to a data asset. Each of them have a different meaning in the context of the data catalog.
+
+What is data classification?
+
+Classifications are annotations that can be assigned to entities. The flexibility of classifications enables you to use them for multiple scenarios such as:
+
+understanding the nature of data stored in the data assets
+defining access control policies
+
+Classification is based on the business context of the data. For example, you might classify assets by Passport Number, Driver's License Number, Credit Card Number, SWIFT Code, Person’s Name, and so on. Microsoft Purview has more than 200 system classifiers today. Users can also define their own classifiers in the data catalog. As part of the scanning process, classifications are automatically detected and applied as metadata within the Purview Data Catalog.
+
+Classification rules
+
+In Microsoft Purview, you can apply system or custom classifications on a file, table, or column asset. Microsoft Purview makes use of Regex patterns and bloom filters to classify data. These classifications are then associated with the metadata discovered in the Azure Purview Data Catalog.
+
+Metadata is used to help describe the data that is being scanned and made available in the catalog. During the configuration of a scan set, you can specify classification rules to apply during the scan that will also serve as metadata. The existing classification rules fall under five major categories:
+
+Government - covers attributes such as government identity cards, driver license numbers, passport numbers, etc.
+Financial - covers attributes such as bank account numbers or credit card numbers.
+Personal - personal information such as a person's age, date of birth, email address, phone number, etc.
+Security - attributes like passwords that may be stored.
+Miscellaneous - attributes not covered in the other categories.
+Why classify data?
+
+A good data governance strategy includes a process to classify data to understand its level of confidentiality, determine if the data source is compliant with various regulations, or how long to retain it for. Classification in Microsoft Purview makes data assets easier to understand, search, and govern. Classification can also help you implement measures to protect sensitive data.
+
+Once a classification is tagged to a data source after a scan, you can generate reports and insights to gain a stronger understanding of your data estate. Because classification is based on the business context of the data, it can help bridge the gap between the business and the data team.
+
+Data classification: system vs. custom classification
+
+Microsoft Purview supports both system and custom classifications. There are over +200 system classifications available in Microsoft Purview today. Data teams need to know that if necessary classifications aren't available out of the box, they can work with the data stewards to create custom classifications, to meet their own organizational data governance requirements.
+
+ Important
+
+For the entire list of available system classifications, see Supported classifications in Microsoft Purview.
+
+Who creates custom classifications?
+
+Purview Data Curators can create, update, and delete custom classifiers and classification rules. Purview Data Readers can only view classifiers and classification rules.
+
+In practical terms, Data Curators may not be members of the data team. It is however critical that data team members understand classification to be able to successfully work together and govern data across an organization.
+
+What are data labels?
+
+The Microsoft Purview Data Map supports labeling structured and unstructured data stored across various data sources. This may sound familiar to you from other Microsoft technologies - and may be known as sensitivity labels. The data map extends the use of sensitivity labels from Microsoft Purview Information Protection to assets stored in infrastructure cloud locations and structured data sources.
+
+Labels are defined in Microsoft Purview Information Protection, and you can extend the application to Microsoft Purview Data Catalog.
+
+The screenshot below shows both data classification and label in the Microsoft Purview Data Catalog. You can see that this Azure SQL table has a column called “CreditCard”:
+
+Classified as “Credit Card Number” because scan detected numbers corresponding to credit card pattern rules.
+Labeled as “Confidential – Finance” because credit card number was defined in your organization as confidential information (and this label brings encryption).
+
+
+
+
+Register and scan data - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/catalog-data-artifacts-use-microsoft-purview/2-register-scan-data
+Register and scan data
+10 minutes
+
+Registration and scanning of data enables discoverability of data across an estate.
+
+Before you can register and scan data, it’s important to understand the concept of collections. In Microsoft Purview Data Catalog, collections are key concept because they drive permissions and asset protection. Collections are also used to understand data estate health and catalog usage and adoption, as featured in the data stewardship section of your Data Estate Insights.
+
+Collections
+
+The data map is at the core of Microsoft Purview, which keeps an up-to-date map of assets and their metadata across your data estate. To hydrate the data map, you need to register and scan your data sources, which is done at the collection level. Collections support organizational mapping of metadata. By using collections, you can manage and maintain data sources, scans, and assets in a hierarchy instead of a flat structure. Collections allow you to build a custom hierarchical model of your data landscape based on how your organization plans to use Microsoft Purview to govern your landscape.
+
+Collections also provide a security boundary for your metadata in the data map. Access to collections, data sources, and metadata is set up and maintained based on the collection’s hierarchy in Microsoft Purview, following a least-privilege model:
+
+Users have the minimum amount of access they need to do their jobs.
+Users don't have access to sensitive data that they don't need.
+
+Data sources are registered at the collection level. Scan results can then be sent to this collection or a sub collection. The image below displays the structure of a collection.
+
+ Tip
+
+Learn more about Microsoft Purview collections architectures and best practices.
+
+Register and scan data sources
+
+Data governance use begins at collection level, with the registration of data sources in Microsoft Purview governance portal. Microsoft Purview supports an array of data sources. Data teams (analysts, engineers, and scientists) may not be actively registering and scanning data in Microsoft Purview, but it's critical that data consumers understand governance efforts. Registering and scanning assets requires Data Curator permissions.
+
+ Important
+
+Data registered and scanned in Microsoft Purview only collects metadata information. Data remains in its location and isn't migrated to any other platform.
+
+Register a data source
+
+Registering a data source is done from within the Azure portal. Once you have a Microsoft Purview service configured in Azure, you use the Microsoft Purview governance portal to register your data sources.
+
+To register a data source, you'll select the icon to register a data source as displayed in the image below. Selecting this icon will give you access to all data source connectors.
+
+Below is a small sample of available connectors in Microsoft Purview Data Catalog. See supported data sources and file types for an up-to-date list of supported data sources and connectors.
+
+Registering a data source is straightforward, you need to complete the required fields. Authentication will be done during the scanning phase.
+
+Each type of data source you choose will require specific information to complete the registration. For example, if your data sources reside in your Azure subscription, you'll choose the necessary subscription and storage account name.
+
+Scan a data source
+
+Once you have data sources registered in the Microsoft Purview governance portal and displayed in the data map, you can set up scanning. The scanning process can be triggered to run immediately or can be scheduled to run on a periodic basis to keep your Microsoft Purview account up to date.
+
+Scanning assets is as simple as selecting New scan from the resource as displayed in the data map.
+
+You'll now need to configure your scan and assign the following details:
+
+Assign a friendly name.
+Define which integration runtime to use to perform the scan.
+Create credentials to authenticate to your registered data sources.
+Choose a collection to send scan results.
+
+After the basic configuration, you'll scope your scan, which allows you to choose just a specific zone of your data source. For instance, if you have a collection called “Raw” in your data map, you can define the scope to scan only the raw container of your data lake.
+
+After configuring and scoping your scan, you'll define the scan rule set. A scan rule set is a container for grouping a set of scan rules together so that you can easily associate them with a scan. For example, you might create a default scan rule set for each of your data source types, and then use these scan rule sets by default for all scans within your company. You might also want users with the right permissions to create other scan rule sets with different configurations based on business need.
+
+Once a scan is complete, you can refer to the scan details to view information about the number of scans completed, assets detected, assets classified, Scan information. It’s a good place to monitor scan progress, including success or failure.
+
+ Tip
+
+Refer to Scanning best practices for more information on scanning assets.
+
+Roles and permissions
+
+Permissions in Microsoft Purview are assigned at collection level. Collections are used to organize assets and sources and can be thought of as a logical grouping of data assets.
+
+Data teams looking to discover and use data need to be assigned the Data Reader role in a collection in Microsoft Purview. The Data Reader role enables users to find assets, but doesn't enable users to edit anything. The Data Curator role is required to edit information about assets, assign classifications, and associate assets with glossary entries. To set up scans via the Microsoft Purview Governance Portal, individuals need to be either a data curator on the collection or data curator and data source administrator where the source is registered.
+
+When a Microsoft Purview account is created, it starts with a root collection that has the same name as the Microsoft Purview account itself. The creator of the Microsoft Purview account is automatically added as a Collection Admin, who can then assign Data Source Admin, Data Curator, and Data Reader on this root collection, and can edit and manage this collection.
+
+ Tip
+
+Learn more about Microsoft Purview permissions and access.
+
+
+
+
+Introduction - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/catalog-data-artifacts-use-microsoft-purview/1-introduction
+Introduction
+3 minutes
+
+The Microsoft Purview Data Catalog offers a browse experience that enables users to explore available data. Users can explore the data catalog either by collection or through traversing the hierarchy of each data source. The first step in understanding the contents of your data map is registering and scanning data, after which you can classify data for easy identification of assets to use for reporting.
+
+Learning objectives
+
+In this module, you will:
+
+Describe asset classification in Microsoft Purview.
+
+
+
+
+Catalog data artifacts by using Microsoft Purview - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/catalog-data-artifacts-use-microsoft-purview/
+
+Catalog data artifacts by using Microsoft Purview
+Module
+6 Units
+Feedback
+Beginner
+Data Analyst
+Data Engineer
+Microsoft Purview
+
+Register, scan, catalog, and view data assets and their relevant details in Microsoft Purview.
+
+Learning objectives
+
+By the end of this module, you’ll be able to:
+
+Describe asset classification in Microsoft Purview.
+Add
+Prerequisites
+Experience using the Azure data ecosystem.
+Introduction
+min
+Register and scan data
+min
+Classify and label data
+min
+Search the data catalog
+min
+Knowledge check
+min
+Summary
+min
+
+
+Summary - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/discover-trusted-data-use-azure-purview/7-summary
+Summary
+3 minutes
+
+Using search in Azure Purview data catalog enabled you to find the correct asset to use for the sales report. You were able to locate the asset, verify that it is certified for use, contact experts and dataset owners, and open a Power BI desktop report containing a connection to the asset. You also integrated Microsoft Purview into Azure Synapse studio to enrich the Azure Synapse experience.
+
+Microsoft Purview empowers data analysts and other data consumers to find valuable, trustworthy data by searching and browsing data assets across an organization's data estate.
+
+Learn more
+Microsoft Purview Permissions
+Microsoft Source Readiness at Scale
+
+
+
+
+Knowledge check - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/discover-trusted-data-use-azure-purview/6-knowledge-check
+Knowledge check
+3 minutes
+
+Choose the best response for each of the questions below. Then select Check your answers.
+
+Check your knowledge
+1. 
+
+What feature of Microsoft Purview can analysts and other data consumers use to find trustworthy data for reports?
+
+ 
+
+Data map.
+
+Data catalog.
+
+Data policies.
+
+2. 
+
+If an analyst is looking for a specific asset by name and type, what is the most efficient way to find that asset in the data catalog?
+
+ 
+
+Browse assets.
+
+Manage glossary.
+
+Search catalog.
+
+3. 
+
+How can users download Power BI data source files that contain connections to assets discovered in Microsoft Purview?
+
+ 
+
+In the Microsoft Purview data catalog, in the asset view.
+
+In the Microsoft Purview insights report.
+
+Users can't download Power BI data source files from Microsoft Purview.
+
+Check your answers
+
+
+
+
+Demo-Introduction - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/discover-trusted-data-use-azure-purview/5-integrate
+Integrate with Azure Synapse Analytics
+4 minutes
+
+Microsoft Purview can be integrated directly into Azure Synapse. If Azure Synapse Studio is massively deployed in your organization, you can get the data catalog experience directly in Azure Synapse Studio.
+
+This integrated experience allows you to discover Microsoft Purview assets, interact with them through Synapse capabilities, and push lineage information to Microsoft Purview.
+
+ Note
+
+To connect an Microsoft Purview Account to a Synapse workspace, you need 2 types of permissions. You need a contributor role in Synapse workspace from Azure portal identity and access management (IAM). You also need access to that Microsoft Purview Account. For more information, see Microsoft Purview permissions.
+
+Let’s imagine you need to find and understand some assets before working with them in pipelines or notebooks. From Azure Synapse Studio, you can easily query your Microsoft Purview data catalog.
+
+In Azure Synapse Studio, from the Data blade on the left, select Purview in the dropdown next to the search bar.
+
+Search for the asset that exists in Purview. Imagine you're looking for movie files. Enter the keyword movie in the search bar, and fine tune your search by selecting Files as the object type and Raw as the collection.
+
+Select the first asset “Movies.csv” to get asset details. Because you are in Azure Synapse Studio, you can also leverage Azure Synapse capabilities.
+
+For instance, you can use Azure Synapse serverless to query your assets. Select Develop, New SQL Script and Select top 100.
+
+Double check you're connected to your serveless instance and select Run to execute the script and get an overview of your data.
+
+After reviewing data, you can use the asset, for example, adding to a new dataflow in Azure Synapse.
+
+ Note
+
+See Connect an Microsoft Purview Account for detailed information about integrating Microsoft Purview into Azure Synapse Analytics.
+
+
+
+
+Use assets with Power BI - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/discover-trusted-data-use-azure-purview/4-use-asset-power-bi
+Use assets with Power BI
+3 minutes
+
+The integration of Microsoft Purview and Power BI makes it possible to gain a more complete understanding of the data across your estate.
+
+Request access to assets
+
+In your search or browsing session, you may come across assets that you don't have access to. Microsoft Purview makes it simple to request access directly from the Data Catalog by using the “Request access” button. Requesting access will kick off a workflow that manages requests and approvals.
+
+Build a Power BI report using data discovered in Purview
+
+Working as a new analyst, you've taken the time to search and browse assets and now you'd like to use those trusted assets in a Power BI report. Purview makes it simple, with the ability to open the asset in Power BI desktop.
+
+Selecting Open in Power BI Desktop initiates the download of a Power BI Data Source file (PBIDS) you can open with Power BI Desktop. PBIDS files contain a connection to the data source, so all you need to do is enter credentials upon opening the file and you're ready to start building.
+
+Scan a Power BI tenant
+
+In addition to using Purview to find trusted data sources in the data estate to build reports, you can also scan your Power BI tenant to manage and catalog assets. The metadata of Power BI assets, and information about their lineage across Power BI workspaces and their connections to data sources, are then available in Microsoft Purview.
+
+ Note
+
+See Connect to and manage a Power BI tenant in Microsoft Purview for more details.
+
+
+
+
+Browse assets - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/discover-trusted-data-use-azure-purview/3-browse-assets
+Browse assets
+4 minutes
+
+Searching a data catalog is a great tool for data discovery you know what you're looking for. Often, you may not know how your data estate is structured. The Microsoft Purview data catalog offers a browse experience that enables exploration of available data, either by collection or by exploring the hierarchy of each data source in the catalog.
+
+Browse by collection or source type
+
+If you're new to an organization or department, you may want to familiarize yourself with the contents of the data estate. From the Microsoft Purview Studio home page, select the “Browse assets” tile to browse either by collection or by source type.
+
+Here you can specify whether you'd like to browse by collection or by source type.
+
+Browse by collection allows you to explore the different collections you're a data reader or curator for. You'll only see collections you have access to. Select a collection to get a list of assets in that collection with the facets and filters available in search.
+
+ Tip
+
+Collections are a tool to manage ownership and access control across assets and data sources. They also organize assets and sources into categories that are customized to match the business flow. See Create and manage collections in Microsoft Purview to learn more.
+
+Browse by source type allows you to explore the hierarchies of data sources using an explorer view.
+
+After selecting a tile associated with a data source type, you'll see a list of assets belonging to that type. From there, you'll be able to use the explorer view to see parent and child assets.
+
+The Microsoft Purview data catalog browse experience enables analysts or data consumers to explore what data is available in many different ways. Microsoft Purview has the ability to enable users access to data you may not have known about before. The possibilities are endless so long as your organization's data stewards have scanned and classified data across the estate.
+
+
+
+
+Search for assets - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/discover-trusted-data-use-azure-purview/2-search-browse-assets
+Search for assets
+10 minutes
+
+Microsoft Purview offers a central place to discover and understand assets to use in your day-to-day activities. This central place, Microsoft Purview data catalog, provides advanced search capabilities to quickly find the right assets and information. Using keywords, business terms and Microsoft Purview data catalog functionalities, you can find the assets needed to build and design reports.
+
+As a data analyst looking for assets, you'll be searching the Microsoft Purview data catalog. This assumes that the Microsoft Purview data Map has been created by your organization. The data map provides the foundation for data discovery. The data map captures metadata about enterprise data in analytics and operations systems on-premises and in the cloud and must be established before the data catalog can be searched.
+
+ Note
+
+Learn more about the Microsoft Purview data map components.
+
+Search the Microsoft Purview data catalog
+
+From the Microsoft Purview Studio home page, users can type relevant keywords to start discovering assets. In this scenario, you're looking for “product sales.”
+
+The screenshot below displays the search result, with all assets corresponding to the keywords entered in the search engine.
+
+You can fine-tune your search using the filters on the left side of the page.
+
+You can filter by:
+
+Source type (and instance if needed)
+Object type
+Classification
+Glossary term
+If needed, more options are available like Collection, Contact and Label
+
+You've been instructed to connect to sources like Azure SQL tables. In the result displayed below, two assets are displayed. To use the correct asset, it’s possible to browse each asset to dig for more detailed information. Alternatively, you can rely on the work done by the data stewards who have labeled certified assets for the organization.
+
+Before using this asset to create your report, you need to verify more details and validate where data comes from to populate this asset. Select the asset to access more information.
+
+Understand a single asset
+Asset overview
+
+Select an asset to see the overview. The overview displays information at a glance, including a description, asset classification, schema classification, collection path, asset hierarchy, and glossary terms.
+
+The asset description provides a brief explanation of the purpose of an asset. Data stewards have made data analysts lives easier in the screenshot below, by noting that this is the correct resource to use for sales reporting.
+
+Beneath the description, you'll see the asset classification and schema classification.
+
+Data classification, in the context of Microsoft Purview, is a way of categorizing data assets by assigning unique logical labels or classes. Classification is based on the business context of the data. For example, you might classify assets by Passport Number, Driver's License Number, Credit Card Number, SWIFT Code, Person’s Name, and so on. Asset classifications can be automatically applied during a scan or applied manually.
+
+ Note
+
+Microsoft Purview comes with more than 200 classifications out of the box. For a full list of classifications, see System classifications in Microsoft Purview.
+
+The overview tab reflects both asset level classifications and column level classifications that have been applied, which you can also view as part of the schema.
+
+ Important
+
+You may notice that the classifications displayed above are sensitive or contain personally identifiable information (PII). data encryption is done at the source level, and Microsoft Purview stores only the metadata. It does not preview data.
+
+You can also view the collection path, hierarchy and glossary terms on the right side of the overview tab.
+
+The collection path refers to the location of the asset inside Microsoft Purview. You have the option to move an asset to another collection.
+
+You can view the full asset hierarchy within the overview tab. As an example: if you navigate to a SQL table, then you can see the schema, database, and the server the table belongs to.
+
+Glossary terms are a managed vocabulary for business terms that can be used to categorize and relate assets across your environment. For example, terms like 'customer,' 'buyer, 'cost center,' or any terms that give your data context for your users. You can view the glossary terms for an asset in the overview section, and you can add a glossary term on an asset by editing the asset.
+
+ Note
+
+For more information, see the business glossary page.
+
+Asset schema
+
+The schema view of the asset includes more granular details about the asset, such as column names, data types, column level classifications, terms, and descriptions.
+
+Asset lineage
+
+Asset lineage gives you a clear view of how the asset is populated and where data comes from. Data lineage is broadly understood as the lifecycle that spans the data's origin, and where it moves over time across the data estate. Data lineage is important to analysts because it enables understanding of where data is coming from, what upstream changes may have occurred, and how it flows through the enterprise data systems.
+
+A single view on the asset lineage tab displays the data flow to and from the asset. Asset lineage can also help you understand how the asset was built and how the asset is used inside the organization.
+
+The columns pane on the left side of the lineage tab allows users to select and track columns as they flow through the lineage. For example, if you select the column Full Name, you can see how the Full Name field was created and where the information comes from.
+
+ Note
+
+The lineage view is a powerful way to understand the transformation process an asset has undergone. Learn more about the lineage experience in Microsoft Purview data catalog
+
+Asset contacts and related assets
+
+Asset contacts provide you contact details of experts or dataset owners with any questions. As a new analyst searching for the right data sources for your report, you may find these individuals helpful.
+
+If needed, you can also navigate through the technical hierarchy of assets that are related to the current asset you're viewing.
+
+The ability to search the Microsoft Purview data catalog has the potential to break down data silos and enable the next level of enterprise analytics.
+
+
+
+
+Introduction - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/discover-trusted-data-use-azure-purview/1-introduction
+Introduction
+2 minutes
+
+Microsoft Purview is a unified data governance service that helps you manage and govern your on-premises, multi-cloud, and software-as-a-service (SaaS) data. Data professionals can easily create a holistic, up-to-date map of the entire data landscape. Microsoft Purview includes automated data discovery, sensitive data classification, and end-to-end data lineage. Microsoft Purview can empower data analysts and other data consumers to find valuable, trustworthy data.
+
+Imagine that you're a new Data Analyst at Contoso. In your second week, the sales manager desperately asks for the latest inventory and sales data for an impromptu review. After clarifying the requirements, you know you need to quickly find accurate assets to create a report. With the help of Microsoft Purview data catalog, you'll be able to search, browse, and discover assets. More importantly, you'll be able to validate that you’re using the right data sources for your reports.
+
+Learning objectives
+
+In this module, you will:
+
+Browse and search data catalog assets.
+Use data catalog assets with Power BI.
+Use Microsoft Purview in Azure Synapse Studio.
+
+
+
+
+Discover trusted data using Microsoft Purview - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/discover-trusted-data-use-azure-purview/
+
+Discover trusted data using Microsoft Purview
+Module
+7 Units
+Feedback
+Beginner
+Data Analyst
+Data Engineer
+Power BI
+Microsoft Purview
+
+Use Microsoft Purview Studio to discover trusted organizational assets for reporting.
+
+Learning objectives
+
+After completing this module, you'll be able to:
+
+Browse, search, and manage data catalog assets.
+Use data catalog assets with Power BI.
+Use Microsoft Purview in Azure Synapse Studio.
+Add
+Prerequisites
+Experience using the Azure data ecosystem.
+Introduction
+min
+Search for assets
+min
+Browse assets
+min
+Use assets with Power BI
+min
+Integrate with Azure Synapse Analytics
+min
+Knowledge check
+min
+Summary
+min
+
+
+lineage-end-end-expanded.png (1908×817)
+https://learn.microsoft.com/en-us/training/modules/intro-to-microsoft-purview/media/lineage-end-end-expanded.png#lightbox
+
+
+summary - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/intro-to-microsoft-purview/6-summary
+Summary
+1 minute
+
+Our goal was to help you evaluate whether Microsoft Purview is the right choice to help you manage your enterprise data environment and its various data sources. We looked at how to:
+
+Register data sources.
+Map data sources.
+Scan data in your sources.
+Explore metadata and classification of the data.
+
+We covered how you can use the Microsoft Purview governance portal to register data sources and create a data map. Setting up scanning causes Microsoft Purview to scan through the selected data types in the sources and list metadata associated with those sources. This metadata documents the expected usage to help users discover what's contained in the data sources. We also showed how the metadata includes classification information to help identify sensitive data.
+
+These criteria help you evaluate how Microsoft Purview can help your business catalog data for users and data producers. We also showed how Microsoft Purview can help your company meet its data governance needs by using the metadata and classification features.
+
+References
+
+For more information, see:
+
+Introduction to Microsoft Purview
+Map your data estate with Microsoft Purview
+Microsoft Purview for unified data governance
+Enable unified data governance with Microsoft Purview (video)
+Deploy Microsoft Purview and scan an Azure Data Lake resource using the Azure portal
+
+
+
+
+scan-rule-sets-expanded.png (1733×607)
+https://learn.microsoft.com/en-us/training/modules/intro-to-microsoft-purview/media/scan-rule-sets-expanded.png#lightbox
+
+
+where-is-data-expanded.png (936×526)
+https://learn.microsoft.com/en-us/training/modules/intro-to-microsoft-purview/media/where-is-data-expanded.png#lightbox
+
+
+Knowledge check - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/intro-to-microsoft-purview/5-knowledge-check
+Knowledge check
+15 minutes
+
+Choose the best response for each of the following questions, and then select Check your answers.
+
+1. 
+
+What does Microsoft Purview do with the data it discovers from your registered sources?
+
+ 
+
+It catalogs and classifies the data that's scanned.
+
+It moves the data to your Azure subscription, automatically creating the necessary storage accounts.
+
+It performs data transformations to match your on-premises schemas.
+
+2. 
+
+Where would you register your data sources for use in Microsoft Purview?
+
+ 
+
+On the Overview tab of the Microsoft Purview account page.
+
+On the Managed Resources tab of the Microsoft Purview account page.
+
+In the Microsoft Purview governance portal.
+
+3. 
+
+What aspect of Microsoft Purview is used to configure the data discovery for your data sources?
+
+ 
+
+Scan rules
+
+Collections
+
+Classifications
+
+Check your answers
+
+
+
+
+when-to-use-microsoft-purview - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/intro-to-microsoft-purview/4-when-to-use-microsoft-purview
+When to use Microsoft Purview
+5 minutes
+
+In this unit, we discuss how you can decide whether Microsoft Purview is the right choice for your data governance and discovery needs. The criteria that indicate whether Microsoft Purview will meet your requirements are:
+
+Discovery
+Governance
+
+Let's take a look at these criteria and see how Microsoft Purview can help address their needs.
+
+Discovery
+
+Without a central location to register data sources, you might be unaware of a data source unless you come into contact with it as part of another process.
+
+Unless you know the location of a data source, you can't connect to the data by using a client application. You're required to know the connection string or path.
+
+The intended use of the data is hidden to you unless you know the location of a data source's documentation. Data sources and documentation might live in several places and be utilized through different kinds of experiences.
+
+Governance
+
+As the data in your organization grows, the task of discovering, protecting, and governing that data becomes more difficult. Data is stored in different locations, which might be required for compliance reasons. The data might contain sensitive information such as credit card numbers, social security numbers, or other personal information.
+
+Compliance with company security policies, government regulations, and customer needs are critical considerations for data governance. Understanding which data sources contain sensitive information is key to knowing where protections are needed and how to guard against access to this sensitive data.
+
+Apply the criteria
+
+Let's take a look at how Microsoft Purview can address the data discovery and governance criteria.
+
+Does Microsoft Purview help with data discovery?
+
+Do you require a solution or centralized location to register data sources? Often, users might be unaware of a data source unless they come into contact with it as part of another process. Microsoft Purview can help provide a solution.
+
+After you've registered data sources in the Microsoft Purview governance portal and displayed them in the data map, you can set up scanning of those data sources. The metadata that's returned catalogs the data in those sources. In this way, it's easier for users to discover what the data sources contain. The metadata is indexed to make each data source easy to discover via search. It's also more understandable to the users who discover it.
+
+Users can contribute to the catalog by tagging, documenting, and annotating data sources that have already been registered. They can register new data sources so that other catalog users can discover, understand, and utilize them.
+
+Does Microsoft Purview help with data governance?
+
+Microsoft Purview can scan and automatically classify data in files and tables. Microsoft Purview classifies data by Bloom Filter and RegEx. Bloom Filter classifications include attributes for city, country/region, place, and person information. RegEx classifications cover attributes that include categories like bank information (ABA routing numbers or country/region-specific banking account numbers), passport numbers, and country/region-specific identification numbers. You can find the full list of supported classifications in the documentation for Microsoft Purview.
+
+Microsoft Purview also uses predefined Data Plane roles to help control who has access to the information in Microsoft Purview. For access, users can use the Microsoft Purview governance portal only if they're placed in at least one of the three supported roles. When a Microsoft Purview account is created, no one but the creator can access the account or use its APIs. New users must be put in one or more of the following roles:
+
+Purview Data Reader role: Has access to the Microsoft Purview governance portal and can read all content in Microsoft Purview except for scan bindings.
+Purview Data Curator role: Has access to the Microsoft Purview governance portal and can read all content in Microsoft Purview except for scan bindings. Can edit information about assets, classification definitions, and glossary terms. Can also apply classifications and glossary terms to assets.
+Purview Data Source Administrator role: Doesn't have access to the Microsoft Purview governance portal (unless the user is also in the Data Reader or Data Curator roles). Can manage all aspects of scanning data into Microsoft Purview. Doesn't have read or write access to content in Microsoft Purview beyond those tasks related to scanning.
+
+These roles are assigned by using the collections where your data sources are registered. You can grant users access to the data they might need without granting them access to the entire data estate. By assigning roles, you can promote resource discoverability while still protecting sensitive information.
+
+
+
+
+how-azure-purview-works - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/intro-to-microsoft-purview/3-how-microsoft-purview-works
+How Microsoft Purview works
+5 minutes
+
+Here's where we take a look at how Microsoft Purview works. In this unit, you learn the core operational theory behind the functioning of Microsoft Purview for mapping and scanning your data sources. The key areas we focus on include how to:
+
+Load data in the data map.
+Browse and search information in the data catalog.
+Load data in the data map
+
+The Microsoft Purview Data Map is a unified map of your data assets and their relationships. As one cohesive map, it's easier for you and your users to visualize and govern. It also houses the metadata that underpins the Microsoft Purview Data Catalog and Data Estate Insights. The Data Map scales up and down to meet your enterprise compliance requirements. You can use it to govern your data estate in a way that makes the most sense for your business.
+
+Source data
+
+Sourcing your data starts with a process where you register data sources. Microsoft Purview supports an array of data sources that span on-premises, multicloud, and software-as-a-service (SaaS) options. You register the various data sources so that Microsoft Purview is aware of them. The data remains in its location and isn't migrated to any other platform.
+
+After you have a Microsoft Purview service configured in Azure, you use the Microsoft Purview governance portal to register your data sources.
+
+Each type of data source you choose requires specific information to complete the registration. For example, if your data sources reside in your Azure subscription, you choose the necessary subscription and storage account name. The following image is an example of choosing an Azure Blob Storage source.
+
+After registration, you scan the data source. Scanning ingests metadata about your data source into the Microsoft Purview Data Map. Each data source has specific requirements for authenticating and configuration to permit scanning of the assets in that data source.
+
+For example, if you have data stored in an Amazon S3 standard bucket, you'll need to provide a configuration for the connection. For this service, you use Microsoft Purview to provide a Microsoft account with secure access to AWS, where the Microsoft Purview scanner will run. The Microsoft Purview scanner uses this access to your Amazon S3 buckets to read your data. The scanner then reports the results (including only the metadata and classification) back to Azure. You can use the Microsoft Purview classification and labeling reports to analyze and review your data scan results.
+
+ Note
+
+Check the Microsoft Purview connector for Amazon S3 documentation for region support related to AWS S3 sources.
+
+In Microsoft Purview, there are a few options to use for authentication when the service needs to scan data sources. Some of these options are:
+
+Microsoft Purview managed identity
+Account key (using Azure Key Vault)
+SQL authentication (using Key Vault)
+Service principal (using Key Vault)
+Map data
+
+The data map is the foundational platform for Microsoft Purview. The data map consists of:
+
+Data assets.
+Data lineage.
+Data classifications.
+Business context.
+
+Customers create a knowledge graph of data that comes in from a range of sources. Microsoft Purview makes it easy to register and automatically scan and classify data at scale. Within a data map, you can identify the type of data source, along with other details around security and scanning.
+
+The data map uses collections to organize these details. Collections are a way of grouping data assets into logical categories to simplify management and discovery of assets within the catalog. You also use collections to manage access to the metadata that's available in the data map.
+
+Select Map view in the Microsoft Purview governance portal to display the data sources in a graphical view, along with the collections you created for them.
+
+Scan data
+
+After you register your data sources, you'll need to run a scan to access their metadata and browse the asset information. Before you can scan the data sources, you're required to enter the credentials for these sources. You can use Azure Key Vault to store the credentials for security and ease of access by your scan rules. The Microsoft Purview governance portal comes with existing system scan rule sets that you can select when you create a new scan rule. You can also specify a custom scan rule set.
+
+A scan rule set is a container for grouping scan rules together to use the same rules repeatedly. A scan rule set lets you select file types for schema extraction and classification. It also lets you define new custom file types. You might create a default scan rule set for each of your data source types. Then you can use these scan rule sets by default for all scans within your company.
+
+For example, you might want to scan only the .csv files in an Azure Data Lake Storage account. Or you might want to check your data only for credit card numbers rather than all the possible classifications. You might also want users with the right permissions to create other scan rule sets with different configurations based on business needs.
+
+Classification
+
+Metadata is used to help describe the data that's being scanned and made available in the catalog. During the configuration of a scan set, you can specify classification rules to apply during the scan that also serve as metadata. The classification rules fall under five major categories:
+
+Government: Attributes such as government identity cards, driver license numbers, and passport numbers.
+Financial: Attributes such as bank account numbers or credit card numbers.
+Personal: Personal information such as a person's age, date of birth, email address, and phone number.
+Security: Attributes like passwords that can be stored.
+Miscellaneous: Attributes not included in the other categories.
+
+You can use several system classifications to classify your data. These classifications align with the sensitive information types in the Microsoft Purview compliance portal. You can also create custom classifications to identify other important or sensitive information types in your data estate.
+
+After you register a data source, you can enrich its metadata. With proper access, you can annotate a data source by providing descriptions, ratings, tags, glossary terms, identifying experts, or other metadata for requesting data-source access. This descriptive metadata supplements the structural metadata, such as column names and data types, that's registered from the data source.
+
+Discovering and understanding data sources and their use is the primary purpose of registering the sources. If you're an enterprise user, you might need data for business intelligence, application development, data science, or any other task where the right data is required. You can use the data catalog discovery experience to quickly find data that matches your needs. You can evaluate the data for its fitness for the purpose and then open the data source in your tool of choice.
+
+At the same time, you can contribute to the catalog by tagging, documenting, and annotating data sources that have already been registered. You can also register new data sources, which are then discovered, evaluated, and used by the community of catalog users.
+
+Browse and search
+
+Microsoft Purview allows you to search information from the data map by using the Microsoft Purview Data Catalog. You can perform text-based search and browse through results by using filters like data source type, tags, ratings, or collection.
+
+You can use business context to search information from the Microsoft Purview catalog. You can define business glossaries and bulk import existing ones, too. You can also apply business context onto assets in the data map. By using a metamodel, you can define business processes in your environment and associate your data sources with those processes. Users can then apply these business contexts to browse and search for information in the data catalog.
+
+Discovery enables you to use:
+
+Semantic search and browse.
+Business glossary and workflows.
+Data lineage with sources, owners, transformations, and lifecycle​.
+
+Data lineage
+
+The concept of data lineage focuses on the lifecycle of data. The lifecycle concerns itself with the various stages data might go through. Data is sourced, moved, and stored throughout its lifecycle. Data might also undergo transformations in the extract, load, and transform/extract, transform, and load (ELT/ETL) operations.
+
+Data lineage can offer insights into the data lifecycle by looking at the data pipeline. You can use the lineage to identify the root cause of data issues, perform data quality analysis, and verify compliance.
+
+Microsoft Purview represents this data lineage in a visual form by showing data movement from source to destination.
+
+
+
+
+what-is-Microsoft-Purview - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/intro-to-microsoft-purview/2-what-is-microsoft-purview
+What is Microsoft Purview?
+3 minutes
+
+Let's start with a few definitions and a quick tour of the core features of Microsoft Purview.
+
+What's Microsoft Purview?
+
+Microsoft Purview is a unified data-governance service that helps you manage and govern your on-premises, multicloud, and software-as-a-service (SaaS) data. You can easily create a broad, up-to-date map of your data landscape with:
+
+Automated data discovery.
+Sensitive data classification.
+End-to-end data lineage.
+
+You can also empower data users to find valuable, trustworthy data.
+
+Microsoft Purview is designed to help enterprises get the most value from their existing information assets. With this cloud-based service, you can register your data sources to help you discover and manage them. Your data sources remain in place, but a copy of the metadata for the source is added to Microsoft Purview.
+
+You can register a wide range of sources in Azure and across your multicloud data estate in Microsoft Purview. These sources include Azure Data Lake Storage, AWS, Azure SQL Database on-premises and in the cloud, and many more.
+
+Microsoft Purview has three main elements:
+
+Microsoft Purview Data Map: The data map provides a structure for your data estate in Microsoft Purview, where you can map your existing data stores into groups and hierarchies. In the data map, you can grant users and teams access to these groups so that they have access to find relevant data stores. The data map can then scan your data stores and gather metadata such as schemas and data types. It can also identify sensitive data types so that you can keep track of them in your data estate.
+
+Microsoft Purview Data Catalog: The data catalog allows your users to browse the metadata stored in the data map so that they can find reliable data and understand its context. For example, users can see where the data comes from and who are the experts they can contact about that data source. The data catalog also integrates with other Azure products, like the Azure Synapse Analytics workspace, so that users can search for the data they need from the applications they need it in.
+
+Microsoft Purview Data Estate Insights: Insights offer a high-level view into your data catalog, covering these key facets:
+
+Data stewardship: A report on how curated your data assets are so that you can track your governance progress.
+Catalog adoption: A report on the number of active users in your data catalog, their top searches, and your most viewed assets.
+Asset insights: A report on the data estate and source-type distribution. You can view by source type, classification, and file size. View the insights as a graph or as key performance indicators.
+Scan insights: A report that provides information on the health of your scans (successes, failures, or canceled).
+Glossary insights: A status report on the glossary to help users understand the distribution of glossary terms by status, and view how the terms are attached to assets.
+Classification insights: A report that shows where classified data is located. It allows security administrators to understand the types of information found in their organization's data estate.
+Sensitivity insights: A report that focuses on sensitivity labels found during scans. Security administrators can make use of this information to ensure security is appropriate for the data estate.
+
+
+
+
+introduction - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/intro-to-microsoft-purview/1-introduction
+Introduction
+2 minutes
+
+As the volume and variety of data increases, the challenges of good data governance are likely to become more difficult. Digital transformation technologies have resulted in new data sources. How do users know what data is available? How do administrators manage data when they might not know what type of data exists and where it's stored? Does the data contain sensitive or personal information?
+
+All these questions aren't easy to answer without insights into the data and the source of storage. Before you can develop data-governance plans for usage and storage, you need to understand the data your organization uses.
+
+Example scenario
+
+As a user or producer of data, you might be a business or technical data analyst, data scientist, or data engineer. You probably spend significant time on manual processes to annotate, catalog, and find trusted data sources.
+
+Without a central location to register data sources, you might be unaware of a data source unless you come into contact with it as part of another process.
+
+Writing metadata descriptions for data sources is often a wasted effort. Client applications typically ignore descriptions that are stored in the data source. Creating documentation for data sources is difficult because you must keep documentation in sync with data sources. Users also might not trust documentation that they think is out of date.
+
+Without the ability to track data from end to end, you must spend time tracing problems created by data pipelines that other teams own. If you make changes to your datasets, you can accidentally affect related reports that are business or mission critical.
+
+Microsoft Purview is designed to address these issues and help enterprises get the most value from their existing information assets. Its catalog makes data sources easy to discover and understand by the users who manage the data.
+
+What will we be doing?
+
+This high-level overview of Microsoft Purview helps you discover the key aspects that make it the tool of choice for mapping out your enterprise data. You learn how it can help you:
+
+Manage and govern your data across various platforms and locations.
+Map out your data landscape.
+Classify sensitive data.
+Empower customers to find trustworthy data.
+What's the main goal?
+
+By the end of this session, you'll be able to decide whether Microsoft Purview is the right choice to help you manage your enterprise data environment and your various data sources.
+
+
+
+
+Introduction to Microsoft Purview - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/intro-to-microsoft-purview/
+
+Introduction to Microsoft Purview
+Module
+6 Units
+Feedback
+Beginner
+Developer
+Data Analyst
+Data Analyst
+Data Scientist
+Database Administrator
+Administrator
+Solution Architect
+AI Engineer
+Microsoft Purview
+
+In this module, you'll evaluate whether Microsoft Purview is the right choice for your data discovery and governance needs.
+
+Learning objectives
+
+By the end of this module, you'll be able to:
+
+Evaluate whether Microsoft Purview is appropriate for your data discovery and governance needs.
+Describe how the features of Microsoft Purview work to provide data discovery and governance.
+Add
+Prerequisites
+Knowledge of Azure accounts and services
+Knowledge of various data sources such as SQL Server and Azure Cosmos DB
+Knowledge of the concepts around data governance
+Introduction
+min
+What is Microsoft Purview?
+min
+How Microsoft Purview works
+min
+When to use Microsoft Purview
+min
+Knowledge check
+min
+Summary
+min
+
+
+Summary - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-data-analytics-scale/7-summary
+Summary
+2 minutes
+
+Understanding the rapidly changing data landscape and how roles and technologies are evolving will enable your organization to achieve analytics at scale. Solutions for scaling analytics are technology, people, and process based, and will set your organization up for data-driven decision making.
+
+In this module you've learned how to:
+
+Describe job roles in analytics
+Understand tools for scaling analytics solutions
+Learn more
+Get started with Azure Synapse Analytics
+Power BI adoption roadmap
+
+
+
+
+Knowledge check - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-data-analytics-scale/6-knowledge-check
+Knowledge check
+3 minutes
+
+Choose the best response for each of the questions below. Then select Check your answers.
+
+Check your knowledge
+1. 
+
+Which of the following tasks are completed by a data analyst?
+
+ 
+
+Build monthly sales reports and gather feedback from the business on how reports are being used.
+
+Design, implement, and maintain operational aspects of on-premises and cloud-based database systems.
+
+Manage and secure the flow of structured and unstructured data from multiple sources into analytical data storage.
+
+2. 
+
+What Microsoft tools do data analysts use for enterprise-scale analytics solutions?
+
+ 
+
+Azure Machine Learning and Azure Cosmos DB.
+
+Microsoft Excel.
+
+Azure Synapse Analytics and Microsoft Power BI
+
+3. 
+
+What people focused strategies can help an organization achieve analytics at scale?
+
+ 
+
+Azure Synapse Analytics and Microsoft Power BI can help achieve analytics at scale in an organization.
+
+Building a data culture, establishing a Center of Excellence, and creating a community of practice.
+
+Achieving analytics at scale should be technology focused rather than people focused.
+
+Check your answers
+
+
+
+
+Strategies to scale analytics - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-data-analytics-scale/5-scale-analytics-center-excellence
+Strategies to scale analytics
+6 minutes
+
+In the previous unit, we focused on the technology used to scale analytics. In this unit we'll focus on other equally important aspects, people and process.
+
+Scaling analytics and data use across an enterprise isn't possible with just great tools. This requires a cultural shift in which the technology becomes the easy piece to implement. Building a data culture, creating a community of practice, and implementing a data governance strategy are tangible ways to focus on people and process.
+
+Just because there's been a massive increase in data generation over the last decade doesn't inherently mean we've equally increased our use of that data. Building a data culture, building a center of excellence, and supporting analytics practitioners with a community of practice are a few strategies to nurture data use.
+
+Build a data culture
+
+Building a data culture goes well beyond analytics solutions. Building and maintaining a data culture is a key aspect in an organization's digital transformation, and encourages a culture that makes data-informed decisions. Data culture can be defined in different ways, but generally data culture means a set of behaviors and norms in the organization that encourage data informed decision making.
+
+It's important that you have a well-understood definition of what a healthy data culture means to your organization. This vision of a healthy data culture should:
+
+Originate from the executive level.
+Align with organizational objectives.
+Directly influence your adoption strategy.
+Serve as the high-level guiding principles for enacting governance policies and guidelines.
+
+As an analyst working in a mid-size company, you may have more influence on the data culture than you recognize. Producing useful insights for decision makers often leaves them wanting more, which drives data use. Building a data culture may ideally originate from the executive level but data teams can act as advocates and evangelists.
+
+ Tip
+
+Learn more about building a data culture in the Power BI adoption roadmap: data culture
+
+Establish a Center of Excellence
+
+An analytics Center of Excellence (COE) is an internal team in your organization whose role is to maximize the potential of analytics in the organization. An analytics COE is a focused initiative to achieve analytics at scale.
+
+An analytics COE is traditionally made up of both technical and business experts who evangelize the data-driven culture and guide others in the uptake of analytics solutions. COE members provide expert advice to others and serve as a guiding force promoting the uptake of analytics solutions.
+
+ Tip
+
+Learn more about how to establish your own Center of Excellence
+
+Community of practice
+
+A community of practice is a group of people with a common interest that interacts with, and helps, each other on a voluntary basis. Mastering analytics tools like Power BI creates common interests and encourages individuals across departments and teams to work towards a common goal.
+
+Building a community of practice at your organization encourages knowledge sharing and can catalyze the building of a healthy data culture from the ground-up.
+
+ Tip
+
+Learn more about building a community of practice in the Power BI adoption roadmap: Community of Practice
+
+Building a data culture, building a center of excellence, and supporting analytics practitioners with a community of practice are only a few strategies to ensure that analytics will scale throughout your organization. These, combined with the right technologies will help your organization scale analytics solutions.
+
+
+
+
+Scale analytics with Azure Synapse Analytics and Power BI - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-data-analytics-scale/4-scale-analytics-azure-synapse-analytics-power-bi
+Scale analytics with Azure Synapse Analytics and Power BI
+3 minutes
+
+You've likely noticed the shift in terminology from business intelligence to modern analytics. This shift is due in part to the sheer volume of data generated that needs to be processed quickly, which wouldn't be possible with a traditional ETL, data warehousing, and reporting approach.
+
+Modern analytics takes advantage of advances in computing both on premises and in the cloud. Large in-memory and specialized data stores have become increasingly affordable. These data stores use massively parallel processing, meaning that computations are completed in parallel, distributed across many processors or machines. Distributed processing leads to dramatic improvements in processing time. Additionally, the move to the cloud made it possible to acquire large amounts of computing power that can be turned on and off.
+
+Modern analytics at scale
+
+Azure Synapse Analytics is a unified, end-to-end solution for large scale data analytics. It brings together multiple technologies and capabilities, enabling you to combine the data integrity and reliability of a scalable, high-performance SQL Server based relational data warehouse with the flexibility of a data lake and open-source Apache Spark. Azure Synapse Analytics also includes native support for log and telemetry analytics with Azure Synapse Data Explorer pools, as well as built in data pipelines for data ingestion and transformation.
+
+All Azure Synapse Analytics services can be managed through a single, interactive user interface called Azure Synapse Studio, which includes the ability to create interactive notebooks in which Spark code and markdown content can be combined. Synapse Analytics is a great choice when you want to create a single, unified analytics solution on Azure.
+
+Looking beyond data exploration and into reporting and data use, Power BI and Azure Synapse are natively integrated. Using Power BI with Synapse enables analysts to process large-scale data quickly.
+
+ Note
+
+Azure Synapse Analytics and Power BI are not Microsoft's only tools for scaling analytics. They are however the main tools used by data analysts in scalable modern analytics solutions. Learn more about large-scale data analytics solutions in Explore fundamentals of modern data warehousing.
+
+
+
+
+Review tasks and tools for data analysts - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-data-analytics-scale/3-review-tasks-tools-for-data-analysts
+Review tasks and tools for data analysts
+6 minutes
+
+Data analysts discover and present insights in data. In an enterprise, analysts work with data that has been prepared and stored by the data engineer. A data team working together can surface insights from large volumes of data and enable the business to regularly make data-informed decisions.
+
+The data analyst role can be broad. Analysts may sit in the business, with domain expertise, and focus on producing actionable reports for decision makers quickly. This individual may be referred to as a Power BI data analyst.
+
+Alternatively, an analyst may sit in the IT department, and be responsible for more complex data modeling, with a focus on creating scalable, reusable assets. This individual may be referred to as an enterprise data analyst. The enterprise data analyst may provide technical assistance to the Power BI data analyst.
+
+ Note
+
+Depending on the size and makeup of your organization, data analyst roles may look different. There may be distinct roles for data visualization, data modeling, development, and/or administration and governance of the analytics platform. In a different organization, there might be a single person managing all analyst responsbilities.
+
+Data analyst tasks
+
+Data analysts collect and transform data to generate insights. In addition to digging into and analyzing data, analysts must be able to present data to stakeholders in a way that enables decision making.
+
+Analyst tasks throughout the analytics process include:
+
+Collect and clean data for analysis
+Ingest, transform, and model data in a reporting tool
+Generate data products, dashboards and reports
+Communicate findings with relevant stakeholders
+Monitor usage of analytics solution
+Gather and incorporate feedback and additional requirements
+
+ Note
+
+See Understand concepts of data analytics for more information on the analytics process.
+
+Data analyst tools
+
+There are hundreds of tools that analysts may use to clean and analyze data. Here, we'll focus on Microsoft tools used in an enterprise analytics solution.
+
+Data analysts often use tools like Microsoft Excel, Power BI, and Azure Synapse Analytics to build analytics solutions. Excel may be used for one-off analysis, but when it comes to enterprise analytics solutions analysts are most often querying data from sources like Azure SQL databases or Azure Synapse Analytics.
+
+The Power BI data analyst and the enterprise analyst will likely use similar tools and have similar skill sets, with one major distinction. An enterprise data analyst will be working with data at scale, and is more likely to be working with tools that can handle larger data.
+
+For example, it isn't uncommon for companies today to have petabytes of data across the organization. Analyzing and extracting insights from such massive amounts of data used to take hours, if not days. By using tools like Azure Synapse analytics, this processing time can be brought down to minutes. Massive amounts of data are likely to be handled by the enterprise data analyst.
+
+In addition to technical knowledge of analytics tools, it's critical that analysts have foundational knowledge of relational databases, basic statistics, and data visualization.
+
+ Note
+
+Learn more about foundational knowledge at Explore core data concepts.
+
+The final skill set that makes for a great analyst are soft skills that enable decision making including:
+
+Communication
+Process management
+Problem solving
+Collaboration and team work
+Creativity
+
+Successful data analysts need a combination of technical and soft skills to solve problems and deliver actionable insights.
+
+
+
+
+Explore data team roles and responsibilities - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-data-analytics-scale/2-explore-data-team-roles-responsibilities
+Explore data team roles and responsibilities
+7 minutes
+
+Large data projects can be complex. The projects often involve hundreds of decisions. Multiple people are typically involved, and each person helps take the project from design to production.
+
+Your organization may define roles differently, or give them different names. The roles described in this unit represent the most common division of tasks and responsibilities.
+
+These roles are common in modern data projects:
+
+Data analyst
+Database administrator
+Data engineer
+Data scientist
+Data architect
+Data analyst
+
+A data analyst enables businesses to maximize the value of their data assets. They're responsible for exploring data to identify trends, designing and building analytical models, and enabling advanced analytics capabilities through reports and visualizations.
+
+A data analyst processes raw data into relevant insights based on identified business requirements.
+
+Database administrator
+
+A database administrator (DBA) is responsible for the design, implementation, maintenance, and operational aspects of on-premises and cloud-based database systems. DBAs are responsible for the overall availability and consistent performance and optimizations of databases. DBAs work with stakeholders to implement policies, tools, and processes for backup and recovery plans to recover following a natural disaster or human-made error.
+
+The database administrator is also responsible for managing the security of the data in the database, granting privileges over the data, granting or denying access to users as appropriate.
+
+Data engineer
+
+Data engineers configure data platform technologies that are on-premises and in the cloud. They manage and secure the flow of structured and unstructured data from multiple sources. The data platforms they use can include relational databases, nonrelational databases, data streams, and file stores. Data engineers also ensure that data services securely integrate with other data platform technologies or application services such as Azure Cognitive Services, Azure Search, or even bots.
+
+The role of data engineer is different from the role of a database administrator. A data engineer's scope of work goes beyond looking after a database and the server where it's hosted. Data engineers must also get, ingest, transform, validate, and clean up data to meet business requirements. This process is called data wrangling.
+
+Data scientist
+
+Data scientists perform advanced analytics to extract value from data. Their work can vary from descriptive analytics to predictive analytics. Predictive analytics are used in machine learning to apply modeling techniques that can detect anomalies or patterns.
+
+Predictive analytics is just one aspect of data scientists' work. Some data scientists might even work in the realms of deep learning, iteratively experimenting to solve a complex data problem by using customized algorithms.
+
+Data architect
+
+Data architects are typically responsible for planning and executing an overall data management strategy, including defining standards of data quality and security. They collaborate with other members of the data team to execute the high-level strategy.
+
+Data architects must have deep technical knowledge and strong soft skills like effective communication and leadership.
+
+Role differences
+
+The roles of the data analyst, database administrator, data engineer, data scientist, and data architect differ. Each role solves a different problem and contributes an important part to digital transformation projects.
+
+
+
+
+Introduction - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-data-analytics-scale/1-introduction
+Introduction
+2 minutes
+
+Over the last decade, the amount of data that systems and devices generate has increased significantly. Because of this increase, new technologies, roles, and approaches to working with data are affecting data professionals. In many industries, data professionals want to understand better how these changes affect both their careers and their daily working lives.
+
+To generate value, anyone working with data needs to understand the rapidly changing data landscape and how roles and technologies are evolving.
+
+Learning objectives
+
+In this module, you will:
+
+Explore job roles in analytics
+Understand tools for scaling analytics solutions
+
+
+
+
+Explore data analytics at scale - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-data-analytics-scale/
+
+Explore data analytics at scale
+Module
+7 Units
+Feedback
+Intermediate
+Data Analyst
+Azure
+Azure Synapse Analytics
+Power BI
+
+Describe data analytics at scale and understand the roles of a data team. Learn about the responsibilities of an enterprise data analyst and what tools are available to build scalable solutions.
+
+Learning objectives
+
+After completing this module, you will be able to:
+
+Explore data job roles in analytics
+Understand tools for scaling analytics solutions
+Add
+Prerequisites
+You should be familiar with basic data concepts and terminology.
+Introduction
+min
+Explore data team roles and responsibilities
+min
+Review tasks and tools for data analysts
+min
+Scale analytics with Azure Synapse Analytics and Power BI
+min
+Strategies to scale analytics
+min
+Knowledge check
+min
+Summary
+min
+
+
+Summary - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/understand-concepts-of-data-analytics/6-summary
+Summary
+3 minutes
+
+Understanding data analytics concepts enables you to plan for a successful data analytics project. Knowing that the sales manager is asking for descriptive, diagnostic, and prescriptive analytics helps the data team understand who and what technologies need to be involved.
+
+In this module you've learned how to:
+
+Define the five types of data analytics
+Describe the data analytics process
+Identify data types and storage
+Learn more
+Explore Azure database and analytics services
+Explore fundamentals of modern data warehousing
+
+
+
+
+Knowledge check - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/understand-concepts-of-data-analytics/5-knowledge-check
+Knowledge check
+3 minutes
+
+Choose the best response for each of the questions below. Then select Check your answers.
+
+Check your knowledge
+1. 
+
+Which of the following is an example of descriptive analytics?
+
+ 
+
+A monthly sales report looking at sales data over the last year
+
+A social media algorithm that recommends curated content
+
+An annual HR report that forecasts predicted attrition for the next year
+
+2. 
+
+What are the first three steps in the data analytics process?
+
+ 
+
+Data exploration, data analysis, and deploy analytics solution
+
+Data analysis, deploy analytics solution, and request feedback
+
+Requirements gathering, data ingestion and processing, and data exploration
+
+3. 
+
+Why is it important to understand the difference between structured and unstructured data?
+
+ 
+
+There is no difference between structured and unstructured data
+
+Understanding the difference can determine where data should be stored and what kind of analysis is most appropriate
+
+Understanding the difference will determine if the business requirements have been met
+
+Check your answers
+
+
+
+
+Understand types of data and data storage - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/understand-concepts-of-data-analytics/4-understand-types-of-data-data-storage
+Understand types of data and data storage
+3 minutes
+
+Understanding how data is structured and stored is a critical step that occurs at the beginning of every analytics project, during requirements gathering. Both structured and unstructured data are suitable for analysis, but the tools the data team will use to ingest, transform, and store data will differ according to the data type.
+
+Structured data
+
+Structured data is familiar to most of us. Letters and numbers are organized into columns and rows for simplified search and processing. Structured data is typically quantitative in nature and stored in relational databases and data warehouses. Structured data may reside in something familiar, a Microsoft Excel table. Structured data storage on a larger scale may be stored in a relational database, like an Azure SQL database.
+
+Structured data lends well to all types of analytics and is the most accessible. Structured Query Language (SQL) is used to query relational databases and is commonly used by data analysts, data engineers, and data scientists alike.
+
+Presentation of annual financial data is a common example of using structured data, whether that data is stored in Excel spreadsheets or a relational database like Azure SQL database.
+
+Unstructured data
+
+Unstructured data is information that isn't organized in any discernable manner. Unstructured data is often more suitable for qualitative analysis and is stored in non-relational databases and data lakes.
+
+The formats of unstructured data vary widely, from Word documents, .csv files, json files, images, and PDFs, to audio and video files. These files would be stored in an Azure Data Lake.
+
+
+
+
+Explore the data analytics process - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/understand-concepts-of-data-analytics/3-explore-data-analytics-process
+Explore the data analytics process
+10 minutes
+
+Data analytics is the process of collecting, transforming, and presenting data to inform decision making. Developing an analytics solution begins before any technology is involved, with a requirements gathering exercise. From there the process continues to ingesting, processing, and exploring data. Analysis and solution deployment are followed by requesting feedback from the business. Finally, the analytics solution is optimized and the process begins again. The analytics process is never done.
+
+Here, you'll learn what steps are included in the data analytics process.
+
+Requirements gathering
+
+Data teams work with the business to understand business needs and intended outcomes of an analytics project. Requirements gathering includes identification of:
+
+What are the key business questions?
+What data are available? Will available data respond to business needs or does more data need to be collected?
+What are the essential dimensions - how will stakeholders want to slice and dice the data?
+What are the key performance indicators or performance metrics?
+How will users consume the analysis?
+What is the frequency of data ingestion?
+What is the frequency of reporting?
+
+It's a common misunderstanding that a data team will be able to extract insights from volumes of data without having discussed any of the questions above. A data team won't be able to determine the appropriate type of analysis and/or the correct solution without having followed a structured requirements gathering process.
+
+Requirements gathering may take many forms depending on team structure, data volume and velocity, and the type of analysis required.
+
+Data ingestion and processing
+
+Using the requirements gathered from the business, a data team will begin to ingest and transform data.
+
+Azure data services available for ingestion and transformation include, but aren't limited to Azure Cosmos DB, Azure SQL Database, Azure Synapse Analytics, Azure Databricks, Azure Data Lake, Azure Event Hubs, and Azure Stream Analytics.
+
+A data engineer is often responsible for the initial ingestion and transformation of data. Data is then surfaced to other members of the data team for exploration and analysis. Azure data services commonly used by enterprise data analysts and data scientists may be limited to specific databases or data lakes.
+
+The terms Extract, Transform, and Load (ETL) or Extract, Load, and Transform (ELT) refer to the process of ingesting and processing data.
+
+ Note
+
+Learn more about the ETL process.
+
+Data exploration
+
+Data exploration is the effort to understand what you're working with, and how that data can respond to the needs of the business. Data exploration can be done in many different tools. At a basic level, the data team might use Excel to look at the contents of a .csv to view the number of records and/or the specific variables they have to explore. Each member of the data team may conduct data profiling in a different tool. An analyst may profile data using Power Query in Power BI, while a data scientist may use Apache Spark in Azure Synapse.
+
+Data exploration helps inform required data transformation and cleaning steps, which can be communicated back upstream to the data engineer to build into the analytics solution.
+
+The analyst may also begin dashboard or report prototyping in the data exploration phase. Understanding how the business wants to see and use the results of the analysis will inform the prototype, along with trends and or insights uncovered during data exploration.
+
+Data analysis
+
+After data have been explored, data analysis can begin. Analysis can be descriptive, predictive, prescriptive, or even cognitive and can be conducted in many different tools. Results should respond to identified business needs and upon initial review, will likely lead to more questions and analysis.
+
+There is a difference between a one-off analysis and an analytics solution. Both have their place, and the need for one or the other will be determined during the requirements gathering process.
+
+Deploy analytics solution
+
+Results will be presented to stakeholders in a reporting or data visualization tool like Microsoft Power BI, where people can interact with and use the results of the analysis for decision making.
+
+Key considerations in the deployment of an analytics solution will help determine the right tools, licensing, and permissions needed to get data into the hands of everyone that needs it. Access to timely insights will ultimately lead to data-informed decisions.
+
+Request and process feedback
+
+Deployment of an analytics solution may feel like a finish line, but it's important to understand the answers to a few key questions.
+
+Is the data product being used?
+Does the analysis truly respond to the business needs?
+Are there any unforeseen technical issues with the solution?
+Is the data product accessible?
+What new business questions does this analysis raise?
+
+The individuals using your analytics solution are your customers, and if the product you have built doesn't adequately respond to their needs, there's work to be done.
+
+There are multiple mediums of soliciting feedback. The first launch of a solution may require regular review meetings, whereas monitoring usage metrics of an ongoing project will help you understand usage over time and even areas of your solution that are and aren't useful.
+
+Optimize solution
+
+Implementing the feedback of your users is a logical first step to optimize your analytics solution. There may also be opportunities to remove latency in the process, for example, ensuring the data refresh occurs in the allotted time. Optimization could also mean more accurately reflecting user needs by tweaking visual design or ensuring report visuals render quickly.
+
+Begin again
+
+The analytics process is cyclical by nature. Exposing data and insights often leads to requests for more analysis, which leads to more feedback, and so on. On a large data team, the analytics process may occur in short sprints, where different team members work simultaneously to achieve small goals before moving onto the next step in the process. On smaller teams, one person may be acting in multiple roles, which would make the process look different.
+
+Regardless of what the process looks like for you, communication is a critical component throughout. The data team must communicate with each other and be in dialogue with the business, to ensure solution development is responding to business needs and needs that may appear in the data.
+
+
+
+
+Introduction - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/understand-concepts-of-data-analytics/1-introduction
+Introduction
+2 minutes
+
+Understanding key concepts of data analytics will help you and your team begin to explore and make the best use of your data.
+
+Suppose that the sales manager at Contoso wants to understand sales and marketing trends for the year. They've asked you to analyze data from the last two years to guide their next steps. What are the data showing? Why are sales trending upward? What should the sales team do to continue to increase sales? Before you can begin your analysis, your team reviews data analytics concepts to be sure you're using the right type of analytics for the job.
+
+By the end of this module, you'll understand how different types of analytics may respond to the sales manager's questions. You'll also be able to describe the process of exploring and using data, along with types of data and how they're stored.
+
+Learning objectives
+
+In this module, you will:
+
+Define the five types of data analytics
+Describe the data analytics process
+Identify data types and storage
+
+
+
+
+Understand data analytics types - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/understand-concepts-of-data-analytics/2-understand-data-analytics-types
+Understand data analytics types
+7 minutes
+
+Data analytics is used for exploring data, extracting insights, and acting on those insights.
+
+Data analytics covers a range of activities, each with its own focus and goals. These activities are categorized as descriptive, diagnostic, predictive, prescriptive, and cognitive analytics.
+
+In this unit, you'll learn about these five categories of data analytics and what they are used for.
+
+Descriptive analytics
+What happened?
+
+Descriptive analytics answers questions about what happened, based on historical data, to inform decisions about the future. Descriptive analytics techniques summarize large datasets to present insights to stakeholders. Descriptive analytics is the most common type of analytics and is often performed by a data analyst.
+
+The development of key performance indicators (KPIs) and other performance measures helps track the success or failure of business objectives. KPIs and performance metrics are often set by the business to track key initiatives. The presentation of data related to those KPIs is descriptive analytics.
+
+Descriptive analytics outputs can take many forms, including reports and dashboards. The Sales and Marketing report below displays sales and marketing data for a year by product, channel, and over time.
+
+Diagnostic analytics
+Why did it happen?
+
+Diagnostic analytics helps answer questions about why things happened and is often the next step in data analytics after descriptive analytics. Analysts take findings from descriptive analytics and dig deeper to find the cause. Metrics and indicators of interest are further investigated to discover why they got better or worse. Diagnostic analytics is often performed by data analysts and data scientists.
+
+Diagnostic analytics generally occurs in three steps:
+
+Identify anomalies in the data. Anomalies may be unexpected changes in a metric or a particular market.
+Collect data that's related to these anomalies.
+Use statistical techniques to discover relationships and trends that explain these anomalies.
+
+In Contoso's sales report below, we want to understand why Contoso is or isn't winning bids for new business. Diagnostic analytics help decision makers see that applying discounts of 2% increases the likelihood of winning a bid.
+
+Predictive analytics
+What will happen in the future?
+
+Predictive analytics helps answer questions about what will happen in the future. Predictive analytics techniques use historical data to identify trends and determine if they're likely to recur, providing insight into what may happen in the future. Techniques include statistical and machine learning techniques such as forecasting, neural networks, decision trees, and regression. Predictive analytics is often performed by data scientists.
+
+The line chart below looks at revenue won by year and month, which shows historical decline. Forecasting predicts that revenue won will continue to decrease. Decision makers may use this forecast to change course in an effort to increase the amount of revenue won.
+
+Prescriptive analytics
+What actions should be taken?
+
+Prescriptive analytics takes predictive analytics one step further and helps answer questions about what actions should be taken to achieve a goal or target. This technique allows businesses to make data-informed decisions in the face of uncertainty. Prescriptive analytics techniques rely on machine learning strategies to find patterns in large datasets. By analyzing past decisions and events, the likelihood of different outcomes can be estimated. Prescriptive analytics is often performed by data scientists. Microsoft also provides low-code tools that can be used by analysts to conduct prescriptive analytics, like using machine learning in Power BI.
+
+Algorithmic content recommendations are a common implementation of prescriptive analytics. Using the recommendation algorithm in Azure Machine Learning studio, data scientists can recommend the best actions Contoso should take based on a customer's past habit and characteristics. The screenshot below displays the recommendation algorithm in Azure Machine Learning designer, in which customer data is being used to prescribe a specific recommendation rating.
+
+ Note
+
+To learn more about prescriptive analytics using Azure Machine Learning, review Build a content-based recommendation system.
+
+Cognitive analytics
+How can the problem be solved best?
+
+Cognitive analytics combines artificial intelligence, machine learning, and data analytics approaches to guide decision making. Cognitive analytics draws inferences from existing data and patterns, derives conclusions based on existing knowledge bases, and adds findings back into the knowledge base for future inferences--a self-learning feedback loop. This feedback loop enables cognitive applications to become more precise over time.
+
+By tapping the benefits of massive parallel/distributed computing and the falling costs of data storage and computing power, there's no limit to the cognitive development that these systems can achieve. Microsoft's Azure AI Services enables users to take advantage of cognitive analytics by extracting insights from various types of data, including things like text and images.
+
+ Note
+
+To learn more about data cognitive analytics using Azure AI Services, review Get started with Azure AI Services.
+
+
+
+
+Understand concepts of data analytics - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/understand-concepts-of-data-analytics/
+
+Understand concepts of data analytics
+Module
+6 Units
+Feedback
+Intermediate
+Data Analyst
+Azure
+Azure SQL Database
+Azure Synapse Analytics
+Power BI
+
+Explore key concepts of data analytics, including types of analytics, data, and storage. Explore the analytics process and tools used to discover insights.
+
+Learning objectives
+
+After completing this module, you will be able to:
+
+Describe types of data analytics
+Understand the data analytics process
+Add
+Prerequisites
+You should be familiar with basic data concepts and terminology.
+Introduction
+min
+Understand data analytics types
+min
+Explore the data analytics process
+min
+Understand types of data and data storage
+min
+Knowledge check
+min
+Summary
+min
+
+
+Summary - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-azure-data-services-for-modern-analytics/5-summary
+Summary
+2 minutes
+
+You've now been introduced to the Azure data ecosystem and modern enterprise analytics solutions.
+
+As an analyst on the Relecloud team, you have a solid understanding of data analytics in Azure for data ingestion, processing, and modern analytics. You're confident that you'll be able to make appropriate recommendations as the data team begins to build its analytics solution.
+
+In this module you've learned how to:
+
+Describe the Azure data ecosystem for analytics
+Learn more
+Explore fundamentals of modern data warehousing
+Azure data architecture guide
+
+
+
+
+Knowledge check - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-azure-data-services-for-modern-analytics/4-knowledge-check
+Knowledge check
+3 minutes
+
+Choose the best response for each of the questions below. Then select Check your answers.
+
+Check your knowledge
+1. 
+
+What type of data is best suited for batch processing?
+
+ 
+
+IoT gas sensor data that monitors and detects the presence of toxic or hazardous gasses.
+
+Real-time personalized advertising data.
+
+Daily sales report data.
+
+2. 
+
+What is one advantage of using Power BI over a Synapse notebook for data visualization?
+
+ 
+
+There is no advantage, Power BI and Azure Synapse Analytics are comparable for data visualization
+
+Power BI was designed for distribution of data products outside of the data team.
+
+Power BI displays simple visualizations compared to Synapse notebooks.
+
+Check your answers
+
+
+
+
+Explore modern analytics solution architecture - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-azure-data-services-for-modern-analytics/3-explore-modern-analytics-solution-architecture
+Explore modern analytics solution architecture
+5 minutes
+
+After data ingestion and processing, data are now in a format that can be used for analysis and presentation to decision makers. Presentation of insights for decision making is the end goal of a larger analytics project. Data analysts present findings to decision makers in the form of a data product, like a dashboard or report.
+
+Azure data analytics and reporting
+
+There are many options for analytics and reporting in Azure, depending on the needs of the business. Analysts can explore and visualize data directly in the Azure ecosystem, using tools like Synapse notebooks in Azure Synapse Analytics. Analysts can also build and deploy solutions for use by others using robust reporting tools like Microsoft Power BI.
+
+Explore and visualize data in Azure Synapse Analytics
+
+Azure Synapse Analytics provides a suite of tools to process and analyze an organization's data. It incorporates SQL technologies, Transact-SQL query capabilities, and open-source Spark tools to enable you to quickly process very large amounts of data. Data exploration in Azure Synapse Studio may be the first step in the analytics process, where you can profile and examine data.
+
+Data can be explored and visualized directly in Azure Synapse Studio using the Azure Synapse SQL results pane and using native visuals in Spark notebooks. Simple visualizations of your data make it easier to detect patterns, trends, and outliers, and may help you understand what your next steps in analysis will be.
+
+Synapse Studio provides a SQL script web interface for you to author SQL queries. You can also visualize your SQL script results in a chart by selecting the Chart button.
+
+Synapse notebooks enable you to analyze data across raw formats (CSV, txt, JSON, etc.), processed file formats (parquet, Delta Lake, ORC, etc.), and SQL tabular data files against Spark and SQL.
+
+ Note
+
+Learn more about large-scale data analytics in Azure Synapse Analytics.
+
+Visualize data and create reporting solutions using Microsoft Power BI
+
+Power BI is an enterprise analytics tool that can help you discover and distribute insights from data stored in Azure and beyond. Azure and Power BI can be used together to connect, combine, and analyze your entire data estate. With Power BI, you can create reports with interactive visualizations to drive decision making.
+
+Data visualization in Power BI helps you turn large amounts of granular data into easily understood, visually compelling, and useful business information. The use of Power BI takes the data exploration you may have done in Azure Synapse Analytics a step further. In addition to the enhanced visualization capability, Power BI also provides a platform for secure distribution of dashboards and reports.
+
+Power BI also has native connectors to many Azure data services. Using Power BI, you can connect to data in Azure Synapse Analytics, Azure Databricks, Azure HDInsight, and more.
+
+ Note
+
+Learn more about analytics and reporting with Power BI.
+
+
+
+
+Understand the Azure data ecosystem - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-azure-data-services-for-modern-analytics/2-understand-azure-data-ecosystem
+Understand the Azure data ecosystem
+6 minutes
+
+Modern analytics requires tools that can store and transform data from many sources. In this unit, you'll learn about Azure data storage solutions, data ingestion, and data processing.
+
+Before presenting an analytics solution to Relecloud's CEO, the data team needs a clear understanding of where data will be coming from, what forms data will be in, and the anticipated scale and frequency of incoming data. Before conducting structured requirements gathering, you sit down with the team to review key data concepts.
+
+Azure data storage solutions
+
+Azure Storage accounts are the base storage type within Azure. Azure Storage offers a scalable object store for data objects and file system services in the cloud.
+
+In an analytics solution, data from different sources are combined and prepared for use. Data can be stored as files in a data lake store or in a database. Understanding base storage types within Azure is important for the data engineer, while the data analyst needs to be familiar with an analytical data store that serves processed data in a format that can be queried using analytical tools.
+
+Areas outlined in red in the image above highlight the pieces of the analytics solution that data analysts use to make sense of the data.
+
+ Note
+
+Learn more about data storage in Azure and technology choices for analytical data stores.
+
+Data ingestion and processing
+
+Data ingestion is the process of obtaining and importing data for immediate use or storage in an analytical data store.
+
+Data processing is simply the conversion of raw data to meaningful information through a process. Depending on how data is ingested into your system, you could process each data item as it arrives, or buffer the raw data and process it in groups. Processing data as it arrives is called streaming. Buffering and processing the data in groups is called batch processing.
+
+In batch processing, newly arriving data elements are collected into a group. The whole group is then processed at a future time as a batch. Exactly when each group is processed can be determined in many ways. For example, you can process data based on a scheduled time interval (for example, every hour), or it could be triggered when a certain amount of data has arrived. Relecloud's monthly billing process is a good example of batch processing, as account transactions are processed and billed on a monthly basis.
+
+ Note
+
+Batch processing is the most common type of data processing, best suited for large datasets or data coming from legacy data systems. Batch processing is not suited for rapid analysis and decision making.
+
+In stream processing, each new piece of data is processed when it arrives. For example, data ingestion is inherently a streaming process.
+
+Streaming handles data in real time. Unlike batch processing, there's no waiting until the next batch processing interval, and data is processed as individual pieces rather than being processed a batch at a time. Streaming data processing is beneficial in most scenarios where new, dynamic data is generated on a continual basis.
+
+A fraud department would use stream processing to handle real-time fraud and anomaly detection.
+
+ Note
+
+Stream processing is ideal for projects that require real-time analysis, and is less suited for projects requiring complex analytics.
+
+While data processing typically occurs upstream of the analytical data store, it's critical that analysts understand how data are ingested and at what frequency, to build the appropriate analytics solution.
+
+
+
+
+Introduction - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-azure-data-services-for-modern-analytics/1-introduction
+Introduction
+2 minutes
+
+In the era of data as currency, companies are looking to do more with their data. Distilling large volumes of data into useful insights is key. There are many ways to store, ingest and process, and analyze data in the Azure ecosystem.
+
+You've been hired as an analyst on the data team at a Relecloud, a new communications company. Relecloud's CEO has emphasized that they'll only make data-informed decisions; you're going to be busy! Because the company is new, the existing volume of data feels manageable, but you know from experience it will grow quickly. The CEO has tasked the data team with implementing a modern analytics solution, as soon as possible.
+
+This module introduces the Azure data ecosystem and modern enterprise analytics solutions. You'll learn about data storage, data ingestion and processing, and data analytics in Azure.
+
+Learning objectives
+
+In this module, you will:
+
+Explore the Azure data ecosystem for analytics
+
+
+
+
+Explore Azure data services for modern analytics - Training | Microsoft Learn
+https://learn.microsoft.com/en-us/training/modules/explore-azure-data-services-for-modern-analytics/
+
+Explore Azure data services for modern analytics
+Module
+5 Units
+Feedback
+Intermediate
+Data Analyst
+Azure
+Azure Synapse Analytics
+Power BI
+
+Understand analytics solutions in the Azure data ecosystem. Explore the architecture of a scalable analytics solution to meet business needs.
+
+Learning objectives
+
+After completing this module, you will be able to:
+
+Describe the Azure data ecosystem for analytics
+Add
+Prerequisites
+You should be familiar with basic data concepts and terminology.
+Introduction
+min
+Understand the Azure data ecosystem
+min
+Explore modern analytics solution architecture
+min
+Knowledge check
+min
+Summary
+min
+
+
